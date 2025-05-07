@@ -1,0 +1,121 @@
+{
+    "name": "poe",
+    "displayName": "Panel of Experts",
+    "description": "A panel of multi-LLM experts that collaborate to solve your problems",
+    "version": "0.1.0",
+    "cursor": {
+        "requiredVersion": ">=0.20.0"
+    },
+    "engines": {
+        "node": ">=14.0.0"
+    },
+    "main": "dist/index.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "poe.startPanel",
+                "title": "Start Panel of Experts Discussion"
+            },
+            {
+                "command": "poe.toggleAutoDiscuss",
+                "title": "Toggle Auto-Discussion Mode"
+            },
+            {
+                "command": "poe.resetConversation",
+                "title": "Reset Conversation"
+            }
+        ],
+        "configuration": {
+            "title": "Panel of Experts",
+            "properties": {
+                "poe.apiKeys.openai": {
+                    "type": "string",
+                    "description": "OpenAI API Key",
+                    "default": ""
+                },
+                "poe.apiKeys.anthropic": {
+                    "type": "string",
+                    "description": "Anthropic API Key",
+                    "default": ""
+                },
+                "poe.apiKeys.google": {
+                    "type": "string",
+                    "description": "Google AI API Key",
+                    "default": ""
+                },
+                "poe.defaultModels.openai": {
+                    "type": "string",
+                    "description": "Default OpenAI model",
+                    "default": "gpt-4",
+                    "enum": [
+                        "gpt-4",
+                        "gpt-3.5-turbo"
+                    ]
+                },
+                "poe.defaultModels.anthropic": {
+                    "type": "string",
+                    "description": "Default Anthropic model",
+                    "default": "claude-2",
+                    "enum": [
+                        "claude-2",
+                        "claude-instant-1",
+                        "claude-3-opus-20240229",
+                        "claude-3-sonnet-20240229",
+                        "claude-3-haiku-20240307"
+                    ]
+                },
+                "poe.defaultModels.google": {
+                    "type": "string",
+                    "description": "Default Google AI model",
+                    "default": "gemini-1.5-pro",
+                    "enum": [
+                        "gemini-1.5-pro",
+                        "gemini-1.5-flash",
+                        "gemini-1.0-pro"
+                    ]
+                },
+                "poe.maxMessages": {
+                    "type": "number",
+                    "description": "Maximum number of messages to keep in history",
+                    "default": 100
+                },
+                "poe.maxTurns": {
+                    "type": "number",
+                    "description": "Maximum number of auto-discussion turns",
+                    "default": 50
+                },
+                "poe.autoDiscussDefault": {
+                    "type": "boolean",
+                    "description": "Enable auto-discussion mode by default",
+                    "default": false
+                }
+            }
+        },
+        "views": {
+            "panel": [
+                {
+                    "id": "poe-panel",
+                    "name": "Panel of Experts",
+                    "icon": "expert-panel"
+                }
+            ],
+            "explorer": [
+                {
+                    "id": "poe-sessions",
+                    "name": "Expert Sessions"
+                }
+            ]
+        }
+    },
+    "activationEvents": [
+        "onCommand:poe.startPanel",
+        "onView:poe-panel"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --watch"
+    },
+    "devDependencies": {
+        "typescript": "^5.2.2"
+    }
+}
