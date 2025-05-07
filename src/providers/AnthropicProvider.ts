@@ -45,8 +45,19 @@ export class AnthropicProvider extends BaseProvider {
                 max_tokens: maxTokens || 1024,
             });
 
+            // Extract the text content from the response
+            let content = '';
+            if (response.content && response.content.length > 0) {
+                // Handle different content block types
+                for (const block of response.content) {
+                    if (block.type === 'text') {
+                        content += block.text;
+                    }
+                }
+            }
+
             return {
-                content: response.content[0].text,
+                content,
                 usage: {
                     // Anthropic doesn't provide detailed token usage in the response
                     promptTokens: 0,
@@ -81,8 +92,12 @@ export class AnthropicProvider extends BaseProvider {
             });
 
             for await (const chunk of stream) {
-                if (chunk.type === 'content_block_delta' && chunk.delta.text) {
-                    callback(chunk.delta.text, false);
+                // Handle different chunk types
+                if (chunk.type === 'content_block_delta') {
+                    // Handle text delta 
+                    if (chunk.delta && typeof chunk.delta === 'object' && 'text' in chunk.delta) {
+                        callback(chunk.delta.text as string, false);
+                    }
                 } else if (chunk.type === 'message_stop') {
                     callback('', true);
                 }

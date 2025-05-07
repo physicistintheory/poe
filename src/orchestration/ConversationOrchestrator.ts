@@ -17,7 +17,7 @@ import { BaseProvider } from '../providers/BaseProvider';
 export class ConversationOrchestrator {
     private session: ConversationSession;
     private experts: ExpertAgent[] = [];
-    private moderator: ModeratorAgent;
+    private moderator!: ModeratorAgent;
     private providerMap: Map<string, BaseProvider> = new Map();
     private status: ConversationStatus = ConversationStatus.IDLE;
     private maxTurns: number;

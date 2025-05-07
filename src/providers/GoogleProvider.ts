@@ -1,15 +1,19 @@
-import { LanguageServiceClient } from '@google-ai/generativelanguage';
+import { GenerativeServiceClient } from '@google-ai/generativelanguage';
 import { GoogleAuth } from 'google-auth-library';
 import { BaseProvider } from './BaseProvider';
 import { ProviderType, LLMResponse } from '../types';
 
 export class GoogleProvider extends BaseProvider {
-    private client: LanguageServiceClient;
+    private client: GenerativeServiceClient;
 
     constructor(apiKey: string, defaultModel: string = 'gemini-1.5-pro') {
         super(apiKey, defaultModel);
-        const auth = new GoogleAuth().fromAPIKey(this.apiKey);
-        this.client = new LanguageServiceClient({ auth });
+        // Create auth client
+        const auth = new GoogleAuth({
+            scopes: 'https://www.googleapis.com/auth/generative-language',
+            apiKey: this.apiKey
+        });
+        this.client = new GenerativeServiceClient({ auth });
     }
 
     getProviderType(): ProviderType {
@@ -45,10 +49,19 @@ export class GoogleProvider extends BaseProvider {
                 }
             });
 
-            const response = result[0].candidates?.[0]?.content?.parts?.[0]?.text || '';
+            const responseContent = result[0].candidates?.[0]?.content;
+            let content = '';
+
+            if (responseContent?.parts && responseContent.parts.length > 0) {
+                for (const part of responseContent.parts) {
+                    if ('text' in part) {
+                        content += part.text || '';
+                    }
+                }
+            }
 
             return {
-                content: response,
+                content,
                 usage: {
                     // Google does not provide token counts in the standard response
                     promptTokens: 0,
@@ -72,7 +85,9 @@ export class GoogleProvider extends BaseProvider {
         const formattedMessages = this.formatMessages(messages);
 
         try {
-            const streamingResult = await this.client.generateContentStream({
+            // Google's GenerativeServiceClient doesn't have native streaming
+            // so we'll simulate streaming with a regular call and then chunk the response
+            const result = await this.client.generateContent({
                 model: model || this.defaultModel,
                 contents: formattedMessages,
                 generationConfig: {
@@ -81,9 +96,22 @@ export class GoogleProvider extends BaseProvider {
                 }
             });
 
-            for await (const response of streamingResult.stream) {
-                const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                callback(text, false);
+            const responseContent = result[0].candidates?.[0]?.content;
+
+            if (responseContent?.parts && responseContent.parts.length > 0) {
+                // For each part, simulate streaming by sending one word at a time
+                for (const part of responseContent.parts) {
+                    if ('text' in part && part.text) {
+                        const text = part.text as string;
+                        // Simulate streaming with words
+                        const words = text.split(' ');
+                        for (let i = 0; i < words.length; i++) {
+                            callback(words[i] + ' ', false);
+                            // Small delay to simulate streaming
+                            await new Promise(r => setTimeout(r, 20));
+                        }
+                    }
+                }
             }
 
             callback('', true); // Signal completion
@@ -95,44 +123,13 @@ export class GoogleProvider extends BaseProvider {
 
     formatMessages(messages: { role: string; content: string }[]): any {
         // Google's format is different from the common role/content format
-        // Convert our messages to Google's ContentPart[] format
-        const formattedMessages: any[] = [];
-
-        // Track the current role for combining consecutive messages from the same role
-        let currentRole = '';
-        let currentContent = '';
-
-        for (const message of messages) {
+        return messages.map(message => {
             const role = message.role === 'user' ? 'user' : 'model';
-
-            // If this is a new role or the first message, start a new message object
-            if (role !== currentRole || currentRole === '') {
-                // Add the previous message if it exists
-                if (currentContent) {
-                    formattedMessages.push({
-                        role: currentRole,
-                        parts: [{ text: currentContent }]
-                    });
-                }
-
-                // Reset for the new message
-                currentRole = role;
-                currentContent = message.content;
-            } else {
-                // Same role as previous, so append to content
-                currentContent += '\n' + message.content;
-            }
-        }
-
-        // Don't forget to add the last message
-        if (currentContent) {
-            formattedMessages.push({
-                role: currentRole,
-                parts: [{ text: currentContent }]
-            });
-        }
-
-        return formattedMessages;
+            return {
+                role,
+                parts: [{ text: message.content }]
+            };
+        });
     }
 
     async validateApiKey(): Promise<boolean> {
