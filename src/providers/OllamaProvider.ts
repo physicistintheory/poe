@@ -1,6 +1,8 @@
+/// <reference lib="dom" />
 import { BaseProvider } from './BaseProvider';
 import { ProviderType, LLMResponse } from '../types';
 import fetch from 'node-fetch';
+import { Readable } from 'stream';
 
 export class OllamaProvider extends BaseProvider {
     private baseUrl: string;
@@ -11,7 +13,7 @@ export class OllamaProvider extends BaseProvider {
     }
 
     getProviderType(): ProviderType {
-        return 'ollama';
+        return ProviderType.OLLAMA;
     }
 
     async getAvailableModels(): Promise<string[]> {
@@ -82,28 +84,45 @@ export class OllamaProvider extends BaseProvider {
                 })
             });
 
-            const reader = response.body?.getReader();
-            if (!reader) throw new Error('No response body');
+            if (!response.body) throw new Error('No response body');
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) {
-                    callback('', true);
-                    break;
-                }
+            const stream = response.body as unknown as Readable;
+            let buffer = '';
 
-                const chunk = new TextDecoder().decode(value);
-                const lines = chunk.split('\n').filter(line => line.trim());
-                
+            stream.on('data', (chunk: Buffer) => {
+                buffer += chunk.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
                 for (const line of lines) {
-                    try {
-                        const data = JSON.parse(line);
-                        callback(data.response, false);
-                    } catch (e) {
-                        console.error('Error parsing chunk:', e);
+                    if (line.trim()) {
+                        try {
+                            const data = JSON.parse(line);
+                            callback(data.response, false);
+                        } catch (e) {
+                            console.error('Error parsing chunk:', e);
+                        }
                     }
                 }
-            }
+            });
+
+            stream.on('end', () => {
+                if (buffer.trim()) {
+                    try {
+                        const data = JSON.parse(buffer);
+                        callback(data.response, true);
+                    } catch (e) {
+                        console.error('Error parsing final chunk:', e);
+                    }
+                } else {
+                    callback('', true);
+                }
+            });
+
+            stream.on('error', (error) => {
+                console.error('Stream error:', error);
+                throw error;
+            });
         } catch (error) {
             console.error('Error in streaming completion:', error);
             throw error;
