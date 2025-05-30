@@ -4,6 +4,7 @@ import { OpenAIProvider } from './OpenAIProvider';
 import { AnthropicProvider } from './AnthropicProvider';
 import { GoogleProvider } from './GoogleProvider';
 import { MockProvider } from './MockProvider';
+import { OllamaProvider } from './OllamaProvider';
 
 /**
  * Manages provider instances and their configurations
@@ -88,6 +89,15 @@ export class ProviderManager {
         if (this.useMockProviders) {
             console.log('Using mock providers for testing. Configure API keys in settings for real responses.');
         }
+
+        // Initialize Ollama provider (no API key needed)
+        this.providers.set(
+            ProviderType.OLLAMA,
+            new OllamaProvider(
+                '',  // No API key needed for local Ollama
+                this.configs[ProviderType.OLLAMA]?.defaultModel || 'llama2:3b'
+            )
+        );
     }
 
     /**
@@ -142,26 +152,15 @@ export class ProviderManager {
                         );
                         break;
 
-                    case ProviderType.GOOGLE:
-                        this.providers.set(
-                            type,
-                            new GoogleProvider(
-                                this.configs[type].apiKey!,
-                                this.configs[type].defaultModel
-                            )
-                        );
-                        break;
-                }
-            } else if (this.useMockProviders) {
-                // Use mock provider if no API key is available
-                this.providers.set(
-                    type,
-                    new MockProvider(
+                case ProviderType.GOOGLE:
+                    this.providers.set(
                         type,
-                        this.configs[type].defaultModel
-                    )
-                );
-                console.log(`Using mock ${type} provider`);
+                        new GoogleProvider(
+                            this.configs[type].apiKey!,
+                            this.configs[type].defaultModel
+                        )
+                    );
+                    break;
             }
         }
     }
