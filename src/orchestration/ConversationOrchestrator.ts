@@ -181,7 +181,7 @@ export class ConversationOrchestrator {
         const message = await expert.generateMessage(
             this.session.messages,
             true, // Stream response
-            (chunk, done) => {
+            () => {
                 // Handle streaming updates
                 this.notifyMessageUpdate();
             }
@@ -204,7 +204,7 @@ export class ConversationOrchestrator {
         const message = await this.moderator.generateMessage(
             this.session.messages,
             true, // Stream response
-            (chunk, done) => {
+            () => {
                 // Handle streaming updates
                 this.notifyMessageUpdate();
             }

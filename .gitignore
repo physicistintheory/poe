@@ -36,3 +36,4 @@ logs/
 *.log
 
 venv/
+panel_discussion_output.txt

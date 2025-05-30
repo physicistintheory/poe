@@ -1,7 +1,6 @@
 import requests
 import json
 import time
-from typing import List, Dict, Any
 
 class OllamaClient:
     def __init__(self, base_url: str = "http://localhost:11434"):

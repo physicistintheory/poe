@@ -114,19 +114,19 @@ export class ProviderManager {
                         );
                         break;
 
-                case ProviderType.GOOGLE:
-                    this.providers.set(
-                        type,
-                        new GoogleProvider(
-                            this.configs[type].apiKey!,
-                            this.configs[type].defaultModel
-                        )
-                    );
-                    break;
+                    case ProviderType.GOOGLE:
+                        this.providers.set(
+                            type,
+                            new GoogleProvider(
+                                this.configs[type].apiKey!,
+                                this.configs[type].defaultModel
+                            )
+                        );
+                        break;
+                }
             }
         }
     }
-}
 
     /**
      * Check if a provider has been initialized

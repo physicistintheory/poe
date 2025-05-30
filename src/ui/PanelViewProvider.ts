@@ -35,7 +35,9 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
      */
     resolveWebviewView(
         webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        _context: vscode.WebviewViewResolveContext,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         _token: vscode.CancellationToken
     ) {
         console.log('PanelViewProvider.resolveWebviewView called');
@@ -74,7 +76,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         try {
             console.log('PanelViewProvider._updateView: Updating HTML content');
             // Create HTML content
-            let html = this._getHtmlContent();
+            const html = this._getHtmlContent();
             this._view.webview.html = html;
             console.log('PanelViewProvider._updateView: HTML content set');
         } catch (error) {
