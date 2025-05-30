@@ -10,8 +10,8 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
     {
         id: 'expert-1',
         name: 'Backend Engineer',
-        provider: ProviderType.OPENAI,
-        model: 'gpt-4',
+        provider: ProviderType.OLLAMA,
+        model: 'llama3.2:1b',
         persona: `You are a veteran software engineer with extensive backend experience. 
     You focus on architectural decisions, code quality, and performance optimizations.
     You value reliable, scalable, and maintainable solutions over quick hacks.`,
@@ -21,8 +21,8 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
     {
         id: 'expert-2',
         name: 'Creative Brainstormer',
-        provider: ProviderType.ANTHROPIC,
-        model: 'claude-2',
+        provider: ProviderType.OLLAMA,
+        model: 'llama3.2:1b',
         persona: `You are an innovative thinker who excels at generating creative solutions.
     You think outside the box and challenge assumptions.
     You're skilled at finding unconventional approaches to problems.`,
@@ -32,8 +32,8 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
     {
         id: 'expert-3',
         name: 'Code Optimizer',
-        provider: ProviderType.OPENAI,
-        model: 'gpt-3.5-turbo',
+        provider: ProviderType.OLLAMA,
+        model: 'llama3.2:1b',
         persona: `You are an efficiency-focused developer who specializes in optimizing code.
     You can spot inefficient patterns and suggest improvements.
     You balance readability with performance considerations.`,
@@ -46,8 +46,8 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
 const DEFAULT_MODERATOR: ModeratorConfig = {
     id: 'moderator',
     name: 'Moderator',
-    provider: ProviderType.OPENAI,
-    model: 'gpt-4',
+    provider: ProviderType.OLLAMA,
+    model: 'llama3.2:1b',
     systemPrompt: `As a discussion moderator, your job is to guide the conversation toward productive outcomes.
   Keep the experts focused on the user's question and prevent tangents.
   Summarize key points and ask clarifying questions when needed.`,
@@ -71,6 +71,11 @@ const DEFAULT_CONFIG: PluginConfig = {
             type: ProviderType.GOOGLE,
             defaultModel: 'gemini-1.5-pro',
             models: ['gemini-1.5-pro', 'gemini-1.0-pro']
+        },
+        [ProviderType.OLLAMA]: {
+            type: ProviderType.OLLAMA,
+            defaultModel: 'llama2:3b',
+            models: ['llama2:3b', 'llama2:7b', 'mistral:7b', 'llama3.2:1b']
         }
     },
     defaultExperts: DEFAULT_EXPERTS,

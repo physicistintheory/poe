@@ -34,6 +34,8 @@ export class ApiKeyManager {
                     return this.cursor.getConfiguration('poe.apiKeys.anthropic');
                 case ProviderType.GOOGLE:
                     return this.cursor.getConfiguration('poe.apiKeys.google');
+                case ProviderType.OLLAMA:
+                    return this.cursor.getConfiguration('poe.apiKeys.ollama');
                 default:
                     return undefined;
             }
@@ -61,6 +63,9 @@ export class ApiKeyManager {
                 case ProviderType.GOOGLE:
                     configKey = 'poe.apiKeys.google';
                     break;
+                case ProviderType.OLLAMA:
+                    configKey = 'poe.apiKeys.ollama';
+                    break;
                 default:
                     return false;
             }
@@ -80,7 +85,8 @@ export class ApiKeyManager {
         return {
             [ProviderType.OPENAI]: this.getApiKey(ProviderType.OPENAI),
             [ProviderType.ANTHROPIC]: this.getApiKey(ProviderType.ANTHROPIC),
-            [ProviderType.GOOGLE]: this.getApiKey(ProviderType.GOOGLE)
+            [ProviderType.GOOGLE]: this.getApiKey(ProviderType.GOOGLE),
+            [ProviderType.OLLAMA]: this.getApiKey(ProviderType.OLLAMA)
         };
     }
 

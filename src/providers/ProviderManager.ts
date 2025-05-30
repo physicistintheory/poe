@@ -3,7 +3,6 @@ import { BaseProvider } from './BaseProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { AnthropicProvider } from './AnthropicProvider';
 import { GoogleProvider } from './GoogleProvider';
-import { MockProvider } from './MockProvider';
 import { OllamaProvider } from './OllamaProvider';
 
 /**
@@ -12,7 +11,6 @@ import { OllamaProvider } from './OllamaProvider';
 export class ProviderManager {
     private providers: Map<string, BaseProvider> = new Map();
     private configs: Record<ProviderType, ProviderConfig>;
-    private useMockProviders: boolean = false;
 
     constructor(configs: Record<ProviderType, ProviderConfig>) {
         this.configs = configs;
@@ -31,18 +29,7 @@ export class ProviderManager {
                     this.configs[ProviderType.OPENAI].defaultModel
                 )
             );
-        } else {
-            // Use mock provider if no API key
-            this.useMockProviders = true;
-            this.providers.set(
-                ProviderType.OPENAI,
-                new MockProvider(
-                    ProviderType.OPENAI,
-                    this.configs[ProviderType.OPENAI].defaultModel
-                )
-            );
-            console.log('Using mock OpenAI provider');
-        }
+        } 
 
         // Initialize Anthropic provider if API key is available
         if (this.configs[ProviderType.ANTHROPIC]?.apiKey) {
@@ -53,17 +40,7 @@ export class ProviderManager {
                     this.configs[ProviderType.ANTHROPIC].defaultModel
                 )
             );
-        } else if (this.useMockProviders) {
-            // Use mock provider if no API key
-            this.providers.set(
-                ProviderType.ANTHROPIC,
-                new MockProvider(
-                    ProviderType.ANTHROPIC,
-                    this.configs[ProviderType.ANTHROPIC].defaultModel
-                )
-            );
-            console.log('Using mock Anthropic provider');
-        }
+        } 
 
         // Initialize Google provider if API key is available
         if (this.configs[ProviderType.GOOGLE]?.apiKey) {
@@ -74,22 +51,7 @@ export class ProviderManager {
                     this.configs[ProviderType.GOOGLE].defaultModel
                 )
             );
-        } else if (this.useMockProviders) {
-            // Use mock provider if no API key
-            this.providers.set(
-                ProviderType.GOOGLE,
-                new MockProvider(
-                    ProviderType.GOOGLE,
-                    this.configs[ProviderType.GOOGLE].defaultModel
-                )
-            );
-            console.log('Using mock Google provider');
-        }
-
-        if (this.useMockProviders) {
-            console.log('Using mock providers for testing. Configure API keys in settings for real responses.');
-        }
-
+        } 
         // Initialize Ollama provider (no API key needed)
         this.providers.set(
             ProviderType.OLLAMA,
@@ -164,6 +126,7 @@ export class ProviderManager {
             }
         }
     }
+}
 
     /**
      * Check if a provider has been initialized

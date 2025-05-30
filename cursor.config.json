@@ -25,6 +25,15 @@
                 "title": "Reset Conversation"
             }
         ],
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "poe-container",
+                    "title": "Panel of Experts",
+                    "icon": "resources/expert-panel.svg"
+                }
+            ]
+        },
         "configuration": {
             "title": "Panel of Experts",
             "properties": {
@@ -98,7 +107,7 @@
                     "name": "Expert Sessions"
                 }
             ],
-            "view": [
+            "poe-container": [
                 {
                     "id": "poe-panel",
                     "name": "Panel of Experts",
