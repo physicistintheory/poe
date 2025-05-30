@@ -8,10 +8,6 @@
 	"engines": {
 		"vscode": "^1.81.0"
 	},
-	"activationEvents": [
-		"onCommand:poe.startPanel",
-		"onView:poe-panel"
-	],
 	"contributes": {
 		"commands": [
 			{

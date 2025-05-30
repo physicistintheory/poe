@@ -3,6 +3,7 @@ import { BaseProvider } from './BaseProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { AnthropicProvider } from './AnthropicProvider';
 import { GoogleProvider } from './GoogleProvider';
+import { OllamaProvider } from './OllamaProvider';
 
 /**
  * Manages provider instances and their configurations
@@ -51,6 +52,15 @@ export class ProviderManager {
                 )
             );
         }
+
+        // Initialize Ollama provider (no API key needed)
+        this.providers.set(
+            ProviderType.OLLAMA,
+            new OllamaProvider(
+                '',  // No API key needed for local Ollama
+                this.configs[ProviderType.OLLAMA]?.defaultModel || 'llama2:3b'
+            )
+        );
     }
 
     /**
@@ -109,6 +119,16 @@ export class ProviderManager {
                         type,
                         new GoogleProvider(
                             this.configs[type].apiKey!,
+                            this.configs[type].defaultModel
+                        )
+                    );
+                    break;
+
+                case ProviderType.OLLAMA:
+                    this.providers.set(
+                        type,
+                        new OllamaProvider(
+                            '',  // No API key needed for local Ollama
                             this.configs[type].defaultModel
                         )
                     );

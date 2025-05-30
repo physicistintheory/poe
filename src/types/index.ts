@@ -2,7 +2,8 @@
 export enum ProviderType {
     OPENAI = 'openai',
     ANTHROPIC = 'anthropic',
-    GOOGLE = 'google'
+    GOOGLE = 'google',
+    OLLAMA = 'ollama'
 }
 
 // Agent role types
@@ -84,6 +85,8 @@ export interface PluginConfig {
 // Response from an LLM
 export interface LLMResponse {
     content: string;
+    model?: string;
+    provider?: ProviderType;
     usage?: {
         promptTokens: number;
         completionTokens: number;
