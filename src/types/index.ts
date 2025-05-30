@@ -75,7 +75,7 @@ export interface ProviderConfig {
 
 // Plugin configuration
 export interface PluginConfig {
-    providers: Record<ProviderType, ProviderConfig>;
+    providers: Partial<Record<ProviderType, ProviderConfig>>;
     defaultExperts: ExpertAgentConfig[];
     defaultModerator: ModeratorConfig;
     maxConversationHistoryLength: number;
