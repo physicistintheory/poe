@@ -1,44 +1,87 @@
 {
-    "name": "poe",
-    "version": "0.1.0",
-    "description": "Cursor plugin supporting vibe coding with a panel of AI expert agents",
-    "main": "dist/index.js",
-    "scripts": {
-        "build": "tsc",
-        "dev": "tsc --watch",
-        "test": "jest",
-        "lint": "eslint src/**/*.ts"
-    },
-    "dependencies": {
-        "openai": "^4.20.0",
-        "@anthropic-ai/sdk": "^0.41.0",
-        "@google-ai/generativelanguage": "^2.0.0",
-        "dotenv": "^16.3.1",
-        "react": "^18.2.0",
-        "react-dom": "^18.2.0",
-        "uuid": "^9.0.1"
-    },
-    "devDependencies": {
-        "@types/node": "^20.9.0",
-        "@types/react": "^18.2.15",
-        "@types/react-dom": "^18.2.7",
-        "@types/uuid": "^9.0.8",
-        "typescript": "^5.2.2",
-        "jest": "^29.7.0",
-        "@types/jest": "^29.5.4",
-        "ts-jest": "^29.1.1",
-        "eslint": "^8.53.0",
-        "@typescript-eslint/eslint-plugin": "^6.10.0",
-        "@typescript-eslint/parser": "^6.10.0"
-    },
-    "keywords": [
-        "cursor",
-        "ide",
-        "plugin",
-        "ai",
-        "llm",
-        "chatbot"
-    ],
-    "author": "",
-    "license": "MIT"
+	"name": "poe",
+	"version": "0.1.0",
+	"displayName": "Panel of Experts",
+	"description": "Cursor plugin supporting vibe coding with a panel of AI expert agents",
+	"main": "dist/index.js",
+	"publisher": "kbux",
+	"engines": {
+		"vscode": "^1.81.0"
+	},
+	"activationEvents": [
+		"onCommand:poe.startPanel",
+		"onView:poe-panel"
+	],
+	"contributes": {
+		"commands": [
+			{
+				"command": "poe.startPanel",
+				"title": "Start Panel of Experts Discussion"
+			},
+			{
+				"command": "poe.toggleAutoDiscuss",
+				"title": "Toggle Auto-Discussion Mode"
+			},
+			{
+				"command": "poe.resetConversation",
+				"title": "Reset Conversation"
+			}
+		],
+		"views": {
+			"panel": [
+				{
+					"id": "poe-panel",
+					"name": "Panel of Experts",
+					"icon": "expert-panel"
+				}
+			],
+			"explorer": [
+				{
+					"id": "poe-sessions",
+					"name": "Expert Sessions"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"test": "jest",
+		"lint": "eslint src/**/*.ts"
+	},
+	"dependencies": {
+		"openai": "^4.20.0",
+		"@anthropic-ai/sdk": "^0.41.0",
+		"@google-ai/generativelanguage": "^2.0.0",
+		"dotenv": "^16.3.1",
+		"react": "^18.2.0",
+		"react-dom": "^18.2.0",
+		"uuid": "^9.0.1"
+	},
+	"devDependencies": {
+		"@types/node": "^20.9.0",
+		"@types/react": "^18.2.15",
+		"@types/react-dom": "^18.2.7",
+		"@types/uuid": "^9.0.8",
+		"typescript": "^5.2.2",
+		"jest": "^29.7.0",
+		"@types/jest": "^29.5.4",
+		"ts-jest": "^29.1.1",
+		"eslint": "^8.53.0",
+		"@typescript-eslint/eslint-plugin": "^6.10.0",
+		"@typescript-eslint/parser": "^6.10.0"
+	},
+	"keywords": [
+		"cursor",
+		"ide",
+		"plugin",
+		"ai",
+		"llm",
+		"chatbot"
+	],
+	"author": "",
+	"license": "MIT",
+	"__metadata": {
+		"size": 109857939
+	}
 }
