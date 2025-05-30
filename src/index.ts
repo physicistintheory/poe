@@ -3,7 +3,7 @@ import { ProviderManager } from './providers/ProviderManager';
 import { ConversationOrchestrator } from './orchestration/ConversationOrchestrator';
 import * as vscode from 'vscode';
 import { SessionsTreeDataProvider, SessionTreeItem } from './ui/SessionsTreeDataProvider';
-import { PanelViewProvider } from './ui/PanelViewProvider';
+import { PanelViewProvider, setOutputChannel } from './ui/PanelViewProvider';
 
 // Default expert configurations
 const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
@@ -310,59 +310,67 @@ export class PoePlugin {
 let pluginInstance: PoePlugin | undefined;
 let sessionsProvider: SessionsTreeDataProvider | undefined;
 let panelViewProvider: PanelViewProvider | undefined;
+let outputChannel: vscode.OutputChannel;
 
 /**
  * Activate the extension
  */
 export function activate(context: vscode.ExtensionContext): void {
-    console.log('Activating Panel of Experts plugin');
+    // Create output channel
+    outputChannel = vscode.window.createOutputChannel('Panel of Experts');
+    context.subscriptions.push(outputChannel);
+    
+    // Pass the output channel to the PanelViewProvider
+    setOutputChannel(outputChannel);
+    
+    outputChannel.appendLine('Activating Panel of Experts plugin');
     
     // Create plugin instance
     pluginInstance = new PoePlugin();
     
     // Create and register the panel view provider first
-    console.log('Creating and registering panel view provider...');
+    outputChannel.appendLine('Creating and registering panel view provider...');
     panelViewProvider = new PanelViewProvider(context.extensionUri);
     const panelView = vscode.window.registerWebviewViewProvider(
         'poe-panel',
         panelViewProvider
     );
     context.subscriptions.push(panelView);
-    console.log('Panel view provider registered with ID: poe-panel');
+    outputChannel.appendLine('Panel view provider registered with ID: poe-panel');
 
     // Create and register the sessions tree data provider
-    console.log('Creating and registering sessions tree data provider...');
+    outputChannel.appendLine('Creating and registering sessions tree data provider...');
     sessionsProvider = new SessionsTreeDataProvider();
     const sessionsTreeView = vscode.window.createTreeView('poe-sessions', {
         treeDataProvider: sessionsProvider,
         showCollapseAll: true
     });
     context.subscriptions.push(sessionsTreeView);
-    console.log('Sessions tree view registered with ID: poe-sessions');
+    outputChannel.appendLine('Sessions tree view registered with ID: poe-sessions');
 
     // Initialize the plugin after providers are registered
     pluginInstance.initialize().then(() => {
-        console.log('Plugin initialized, setting orchestrator on panel view provider');
+        outputChannel.appendLine('Plugin initialized, setting orchestrator on panel view provider');
         
         // Set the orchestrator on the panel view provider
         if (pluginInstance && panelViewProvider) {
             const orchestrator = pluginInstance.getOrchestrator();
             if (orchestrator) {
-                console.log('Setting orchestrator on panel view provider');
+                outputChannel.appendLine('Setting orchestrator on panel view provider');
                 panelViewProvider.setOrchestrator(orchestrator);
                 
                 // Add the current session to the tree view
                 if (sessionsProvider) {
                     const session = orchestrator.getSession();
-                    console.log('Adding initial session to tree view:', session.id);
+                    outputChannel.appendLine('Adding initial session to tree view: ' + session.id);
                     sessionsProvider.addSession(session);
                 }
             } else {
-                console.error('No orchestrator available after plugin initialization');
+                outputChannel.appendLine('No orchestrator available after plugin initialization');
             }
         }
     }).catch(err => {
-        console.error('Failed to initialize POE plugin:', err);
+        outputChannel.appendLine('Failed to initialize POE plugin: ' + err);
     });
 
     // Register commands
@@ -373,7 +381,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 
                 // Update the panel view provider with the new orchestrator
                 if (pluginInstance.getOrchestrator() && panelViewProvider) {
-                    console.log('Updating panel view provider with new orchestrator after startPanel command');
+                    outputChannel.appendLine('Updating panel view provider with new orchestrator after startPanel command');
                     panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
                 }
                 
@@ -403,7 +411,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 
                 // Update the panel view provider with the new orchestrator
                 if (pluginInstance.getOrchestrator() && panelViewProvider) {
-                    console.log('Updating panel view provider with new orchestrator after resetConversation command');
+                    outputChannel.appendLine('Updating panel view provider with new orchestrator after resetConversation command');
                     panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
                 }
                 
@@ -419,14 +427,45 @@ export function activate(context: vscode.ExtensionContext): void {
         })
     );
 
-    console.log('Panel of Experts plugin activated');
+    // Add code to try to activate and focus the panel view
+    // Try to show the panel view when activated
+    // First show the view container in the activity bar
+    outputChannel.appendLine('Attempting to show the Panel of Experts view container');
+    setTimeout(() => {
+        vscode.commands.executeCommand('workbench.view.extension.poe-container')
+            .then(() => {
+                outputChannel.appendLine('Successfully focused the Panel of Experts view container');
+                // Then focus the specific panel view
+                setTimeout(() => {
+                    vscode.commands.executeCommand('poe-panel.focus')
+                        .then(() => {
+                            outputChannel.appendLine('Successfully focused the Panel of Experts panel view');
+                        })
+                        .then(undefined, (error: Error) => {
+                            outputChannel.appendLine('Error focusing panel view: ' + error.message);
+                        });
+                }, 500);
+            })
+            .then(undefined, (error: Error) => {
+                outputChannel.appendLine('Error focusing view container: ' + error.message);
+                // Try showing just the panel view directly
+                vscode.commands.executeCommand('poe-panel.focus')
+                    .then(undefined, (error2: Error) => {
+                        outputChannel.appendLine('Error focusing panel view directly: ' + error2.message);
+                    });
+            });
+    }, 1000);
+    
+    outputChannel.appendLine('Panel of Experts plugin activated');
 }
 
 /**
  * Deactivate the extension
  */
 export function deactivate(): void {
-    console.log('Panel of Experts plugin deactivated');
+    if (outputChannel) {
+        outputChannel.appendLine('Panel of Experts plugin deactivated');
+    }
     pluginInstance = undefined;
 }
 

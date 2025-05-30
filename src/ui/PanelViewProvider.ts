@@ -1,6 +1,16 @@
 import * as vscode from 'vscode';
 import { ConversationOrchestrator } from '../orchestration/ConversationOrchestrator';
 
+// Reference to the shared output channel
+let outputChannel: vscode.OutputChannel;
+
+/**
+ * Set the output channel for logging
+ */
+export function setOutputChannel(channel: vscode.OutputChannel) {
+    outputChannel = channel;
+}
+
 /**
  * WebviewViewProvider for the Panel of Experts view
  */
@@ -9,14 +19,22 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     private _orchestrator?: ConversationOrchestrator;
 
     constructor(private readonly _extensionUri: vscode.Uri) {
-        console.log('PanelViewProvider constructor called');
+        if (outputChannel) {
+            outputChannel.appendLine('PanelViewProvider constructor called');
+        } else {
+            console.log('PanelViewProvider constructor called');
+        }
     }
 
     /**
      * Set the active orchestrator
      */
     setOrchestrator(orchestrator: ConversationOrchestrator | undefined): void {
-        console.log('PanelViewProvider.setOrchestrator called', orchestrator ? 'with orchestrator' : 'with undefined');
+        if (outputChannel) {
+            outputChannel.appendLine('PanelViewProvider.setOrchestrator called' + (orchestrator ? ' with orchestrator' : ' with undefined'));
+        } else {
+            console.log('PanelViewProvider.setOrchestrator called', orchestrator ? 'with orchestrator' : 'with undefined');
+        }
         this._orchestrator = orchestrator;
         
         // Register message listener if orchestrator is defined
@@ -40,7 +58,11 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         _token: vscode.CancellationToken
     ) {
-        console.log('PanelViewProvider.resolveWebviewView called');
+        if (outputChannel) {
+            outputChannel.appendLine('PanelViewProvider.resolveWebviewView called');
+        } else {
+            console.log('PanelViewProvider.resolveWebviewView called');
+        }
         this._view = webviewView;
 
         // Set options for the webview
@@ -54,14 +76,22 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
 
         // Handle messages from the webview
         webviewView.webview.onDidReceiveMessage(message => {
-            console.log('Received message from webview:', message);
+            if (outputChannel) {
+                outputChannel.appendLine('Received message from webview: ' + JSON.stringify(message));
+            } else {
+                console.log('Received message from webview:', message);
+            }
             // Handle message based on type
             if (message.type === 'sendMessage' && this._orchestrator) {
                 this._orchestrator.addUserMessage(message.text);
             }
         });
         
-        console.log('PanelViewProvider.resolveWebviewView completed');
+        if (outputChannel) {
+            outputChannel.appendLine('PanelViewProvider.resolveWebviewView completed');
+        } else {
+            console.log('PanelViewProvider.resolveWebviewView completed');
+        }
     }
 
     /**
@@ -69,18 +99,34 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
      */
     private _updateView() {
         if (!this._view) {
-            console.log('PanelViewProvider._updateView: No view available yet');
+            if (outputChannel) {
+                outputChannel.appendLine('PanelViewProvider._updateView: No view available yet');
+            } else {
+                console.log('PanelViewProvider._updateView: No view available yet');
+            }
             return;
         }
 
         try {
-            console.log('PanelViewProvider._updateView: Updating HTML content');
+            if (outputChannel) {
+                outputChannel.appendLine('PanelViewProvider._updateView: Updating HTML content');
+            } else {
+                console.log('PanelViewProvider._updateView: Updating HTML content');
+            }
             // Create HTML content
             const html = this._getHtmlContent();
             this._view.webview.html = html;
-            console.log('PanelViewProvider._updateView: HTML content set');
+            if (outputChannel) {
+                outputChannel.appendLine('PanelViewProvider._updateView: HTML content set');
+            } else {
+                console.log('PanelViewProvider._updateView: HTML content set');
+            }
         } catch (error) {
-            console.error('Error updating view:', error);
+            if (outputChannel) {
+                outputChannel.appendLine('Error updating view: ' + error);
+            } else {
+                console.error('Error updating view:', error);
+            }
             // Provide a fallback UI in case of error
             this._view.webview.html = this._getErrorHtml(error);
         }
@@ -128,15 +174,27 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     private _getHtmlContent(): string {
         // Check if we have an orchestrator
         const hasOrchestrator = !!this._orchestrator;
-        console.log('PanelViewProvider._getHtmlContent: hasOrchestrator =', hasOrchestrator);
+        if (outputChannel) {
+            outputChannel.appendLine('PanelViewProvider._getHtmlContent: hasOrchestrator = ' + hasOrchestrator);
+        } else {
+            console.log('PanelViewProvider._getHtmlContent: hasOrchestrator =', hasOrchestrator);
+        }
         
         const messages = hasOrchestrator && this._orchestrator ? this._orchestrator.getSession().messages || [] : [];
-        console.log(`PanelViewProvider._getHtmlContent: Found ${messages.length} messages`);
+        if (outputChannel) {
+            outputChannel.appendLine(`PanelViewProvider._getHtmlContent: Found ${messages.length} messages`);
+        } else {
+            console.log(`PanelViewProvider._getHtmlContent: Found ${messages.length} messages`);
+        }
 
         // Generate message HTML
         let messagesHtml = '';
         if (hasOrchestrator && messages.length > 0) {
-            console.log('PanelViewProvider._getHtmlContent: Generating messages HTML');
+            if (outputChannel) {
+                outputChannel.appendLine('PanelViewProvider._getHtmlContent: Generating messages HTML');
+            } else {
+                console.log('PanelViewProvider._getHtmlContent: Generating messages HTML');
+            }
             messagesHtml = messages.map(msg => {
                 const role = msg.sender.role.toLowerCase();
                 const id = msg.sender.id;
@@ -150,7 +208,11 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
                 `;
             }).join('');
         } else {
-            console.log('PanelViewProvider._getHtmlContent: Generating no-session HTML');
+            if (outputChannel) {
+                outputChannel.appendLine('PanelViewProvider._getHtmlContent: Generating no-session HTML');
+            } else {
+                console.log('PanelViewProvider._getHtmlContent: Generating no-session HTML');
+            }
             messagesHtml = `<div class="no-session">
                 <p>No active discussion session.</p>
                 <p>Use the command palette to start a new panel discussion.</p>
@@ -158,7 +220,11 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             </div>`;
         }
 
-        console.log('PanelViewProvider._getHtmlContent: Completed generating HTML content');
+        if (outputChannel) {
+            outputChannel.appendLine('PanelViewProvider._getHtmlContent: Completed generating HTML content');
+        } else {
+            console.log('PanelViewProvider._getHtmlContent: Completed generating HTML content');
+        }
         
         // Create a simple HTML structure for testing
         return `<!DOCTYPE html>
