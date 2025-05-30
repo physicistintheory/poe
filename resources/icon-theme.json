@@ -1,0 +1,23 @@
+{
+    "iconDefinitions": {
+        "expert-panel": {
+            "iconPath": "./expert-panel.svg"
+        }
+    },
+    "folderNames": {},
+    "fileExtensions": {},
+    "fileNames": {},
+    "languageIds": {},
+    "light": {
+        "folderNames": {},
+        "fileExtensions": {},
+        "fileNames": {},
+        "languageIds": {}
+    },
+    "highContrast": {
+        "folderNames": {},
+        "fileExtensions": {},
+        "fileNames": {},
+        "languageIds": {}
+    }
+} 

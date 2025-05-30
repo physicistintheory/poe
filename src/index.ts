@@ -1,6 +1,9 @@
 import { ProviderType, PluginConfig, ExpertAgentConfig, ModeratorConfig } from './types';
 import { ProviderManager } from './providers/ProviderManager';
 import { ConversationOrchestrator } from './orchestration/ConversationOrchestrator';
+import * as vscode from 'vscode';
+import { SessionsTreeDataProvider, SessionTreeItem } from './ui/SessionsTreeDataProvider';
+import { PanelViewProvider } from './ui/PanelViewProvider';
 
 // Default expert configurations
 const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
@@ -95,8 +98,44 @@ export class PoePlugin {
             }
         };
 
+        // Try to get API keys from Cursor settings
+        this.loadApiKeysFromSettings();
+
         // Initialize provider manager
         this.providerManager = new ProviderManager(this.config.providers);
+    }
+
+    /**
+     * Load API keys from Cursor settings
+     */
+    private loadApiKeysFromSettings(): void {
+        try {
+            // Get API keys from Cursor settings
+            const openaiKey = vscode.workspace.getConfiguration('poe.apiKeys').get('openai') as string;
+            const anthropicKey = vscode.workspace.getConfiguration('poe.apiKeys').get('anthropic') as string;
+            const googleKey = vscode.workspace.getConfiguration('poe.apiKeys').get('google') as string;
+
+            // Update provider configs with API keys
+            if (openaiKey) {
+                this.config.providers[ProviderType.OPENAI].apiKey = openaiKey;
+            }
+            
+            if (anthropicKey) {
+                this.config.providers[ProviderType.ANTHROPIC].apiKey = anthropicKey;
+            }
+            
+            if (googleKey) {
+                this.config.providers[ProviderType.GOOGLE].apiKey = googleKey;
+            }
+
+            console.log('Loaded API keys from settings:', {
+                openai: openaiKey ? '✓' : '✗',
+                anthropic: anthropicKey ? '✓' : '✗',
+                google: googleKey ? '✓' : '✗'
+            });
+        } catch (error) {
+            console.error('Error loading API keys from settings:', error);
+        }
     }
 
     /**
@@ -106,11 +145,19 @@ export class PoePlugin {
         // Initialize providers
         await this.providerManager.initialize();
 
+        console.log('Initializing provider manager...');
+
         // Create conversation orchestrator with default experts and moderator
-        this.createNewConversation({
-            title: 'New Discussion',
-            goal: ''
-        });
+        try {
+            console.log('Creating initial conversation...');
+            this.createNewConversation({
+                title: 'New Discussion',
+                goal: ''
+            });
+            console.log('Initial conversation created successfully');
+        } catch (error) {
+            console.error('Error creating initial conversation:', error);
+        }
     }
 
     /**
@@ -123,20 +170,31 @@ export class PoePlugin {
         moderator?: ModeratorConfig;
         autoDiscuss?: boolean;
     }): void {
+        console.log('Creating new conversation with settings:', settings.title);
         const experts = settings.experts || this.config.defaultExperts;
         const moderator = settings.moderator || this.config.defaultModerator;
 
-        this.orchestrator = new ConversationOrchestrator(
-            {
-                title: settings.title,
-                goal: settings.goal,
-                autoDiscuss: settings.autoDiscuss ?? this.config.autoDiscussDefault
-            },
-            experts,
-            moderator,
-            this.providerManager.getProviders(),
-            this.config.maxConversationHistoryLength
-        );
+        try {
+            const providers = this.providerManager.getProviders();
+            console.log(`Got ${providers.size} providers for conversation`);
+            
+            this.orchestrator = new ConversationOrchestrator(
+                {
+                    title: settings.title,
+                    goal: settings.goal,
+                    autoDiscuss: settings.autoDiscuss ?? this.config.autoDiscussDefault
+                },
+                experts,
+                moderator,
+                providers,
+                this.config.maxConversationHistoryLength
+            );
+            
+            console.log('Created new conversation orchestrator successfully');
+        } catch (error) {
+            console.error('Error creating conversation orchestrator:', error);
+            throw error; // Re-throw to handle at caller level
+        }
     }
 
     /**
@@ -174,6 +232,197 @@ export class PoePlugin {
             }
         };
     }
+
+    /**
+     * Start a new panel discussion
+     */
+    startPanelDiscussion(): void {
+        vscode.window.showInformationMessage('Starting Panel of Experts Discussion');
+        
+        // Create a new conversation with a more descriptive title
+        const sessionTitle = `Discussion ${new Date().toLocaleDateString()} - ${new Date().toLocaleTimeString()}`;
+        
+        this.createNewConversation({
+            title: sessionTitle,
+            goal: 'New discussion started via command'
+        });
+        
+        // Make sure to add the new session to the tree view
+        if (this.orchestrator && sessionsProvider) {
+            const session = this.orchestrator.getSession();
+            sessionsProvider.addSession(session);
+            
+            // Log to console for debugging
+            console.log('Added new session to tree view:', session.id);
+        } else {
+            console.error('Failed to add session to tree view - orchestrator or sessionsProvider not available');
+        }
+    }
+
+    /**
+     * Toggle auto-discussion mode
+     */
+    toggleAutoDiscuss(): void {
+        if (!this.orchestrator) {
+            vscode.window.showErrorMessage('No active discussion. Start a panel first.');
+            return;
+        }
+        
+        const currentState = this.orchestrator.isAutoDiscussEnabled();
+        this.orchestrator.setAutoDiscuss(!currentState);
+        vscode.window.showInformationMessage(`Auto-discussion mode: ${!currentState ? 'Enabled' : 'Disabled'}`);
+    }
+
+    /**
+     * Reset the current conversation
+     */
+    resetConversation(): void {
+        // Create a new conversation with a unique title
+        const resetTitle = `Reset Discussion ${new Date().toLocaleDateString()} - ${new Date().toLocaleTimeString()}`;
+        
+        this.createNewConversation({
+            title: resetTitle,
+            goal: 'Fresh discussion after reset'
+        });
+        
+        vscode.window.showInformationMessage('Conversation has been reset');
+        
+        // Update the session in the tree view
+        if (this.orchestrator && sessionsProvider) {
+            const session = this.orchestrator.getSession();
+            if (session) {
+                // Add as a new session rather than replacing existing ones
+                sessionsProvider.addSession(session);
+                console.log('Added reset session to tree view:', session.id);
+            }
+        } else {
+            console.error('Failed to update session in tree view after reset');
+        }
+    }
+}
+
+// Plugin singleton instance
+let pluginInstance: PoePlugin | undefined;
+let sessionsProvider: SessionsTreeDataProvider | undefined;
+let panelViewProvider: PanelViewProvider | undefined;
+
+/**
+ * Activate the extension
+ */
+export function activate(context: vscode.ExtensionContext): void {
+    console.log('Activating Panel of Experts plugin');
+    
+    // Create plugin instance
+    pluginInstance = new PoePlugin();
+    
+    // Create and register the panel view provider first
+    console.log('Creating and registering panel view provider...');
+    panelViewProvider = new PanelViewProvider(context.extensionUri);
+    const panelView = vscode.window.registerWebviewViewProvider(
+        'poe-panel',
+        panelViewProvider
+    );
+    context.subscriptions.push(panelView);
+    console.log('Panel view provider registered with ID: poe-panel');
+
+    // Create and register the sessions tree data provider
+    console.log('Creating and registering sessions tree data provider...');
+    sessionsProvider = new SessionsTreeDataProvider();
+    const sessionsTreeView = vscode.window.createTreeView('poe-sessions', {
+        treeDataProvider: sessionsProvider,
+        showCollapseAll: true
+    });
+    context.subscriptions.push(sessionsTreeView);
+    console.log('Sessions tree view registered with ID: poe-sessions');
+
+    // Initialize the plugin after providers are registered
+    pluginInstance.initialize().then(() => {
+        console.log('Plugin initialized, setting orchestrator on panel view provider');
+        
+        // Set the orchestrator on the panel view provider
+        if (pluginInstance && panelViewProvider) {
+            const orchestrator = pluginInstance.getOrchestrator();
+            if (orchestrator) {
+                console.log('Setting orchestrator on panel view provider');
+                panelViewProvider.setOrchestrator(orchestrator);
+                
+                // Add the current session to the tree view
+                if (sessionsProvider) {
+                    const session = orchestrator.getSession();
+                    console.log('Adding initial session to tree view:', session.id);
+                    sessionsProvider.addSession(session);
+                }
+            } else {
+                console.error('No orchestrator available after plugin initialization');
+            }
+        }
+    }).catch(err => {
+        console.error('Failed to initialize POE plugin:', err);
+    });
+
+    // Register commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('poe.startPanel', () => {
+            if (pluginInstance) {
+                pluginInstance.startPanelDiscussion();
+                
+                // Update the panel view provider with the new orchestrator
+                if (pluginInstance.getOrchestrator() && panelViewProvider) {
+                    console.log('Updating panel view provider with new orchestrator after startPanel command');
+                    panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
+                }
+                
+                // Add the session to the tree view
+                if (pluginInstance.getOrchestrator() && sessionsProvider) {
+                    const session = pluginInstance.getOrchestrator()?.getSession();
+                    if (session) {
+                        sessionsProvider.addSession(session);
+                    }
+                }
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('poe.toggleAutoDiscuss', () => {
+            if (pluginInstance) {
+                pluginInstance.toggleAutoDiscuss();
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('poe.resetConversation', () => {
+            if (pluginInstance) {
+                pluginInstance.resetConversation();
+                
+                // Update the panel view provider with the new orchestrator
+                if (pluginInstance.getOrchestrator() && panelViewProvider) {
+                    console.log('Updating panel view provider with new orchestrator after resetConversation command');
+                    panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
+                }
+                
+                // Update the session in the tree view
+                if (pluginInstance.getOrchestrator() && sessionsProvider) {
+                    const session = pluginInstance.getOrchestrator()?.getSession();
+                    if (session) {
+                        // Add as a new session rather than replacing existing ones
+                        sessionsProvider.addSession(session);
+                    }
+                }
+            }
+        })
+    );
+
+    console.log('Panel of Experts plugin activated');
+}
+
+/**
+ * Deactivate the extension
+ */
+export function deactivate(): void {
+    console.log('Panel of Experts plugin deactivated');
+    pluginInstance = undefined;
 }
 
 // Export plugin factory function for Cursor

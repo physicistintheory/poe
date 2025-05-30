@@ -3,6 +3,7 @@ import { BaseProvider } from './BaseProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { AnthropicProvider } from './AnthropicProvider';
 import { GoogleProvider } from './GoogleProvider';
+import { MockProvider } from './MockProvider';
 
 /**
  * Manages provider instances and their configurations
@@ -10,6 +11,7 @@ import { GoogleProvider } from './GoogleProvider';
 export class ProviderManager {
     private providers: Map<string, BaseProvider> = new Map();
     private configs: Record<ProviderType, ProviderConfig>;
+    private useMockProviders: boolean = false;
 
     constructor(configs: Record<ProviderType, ProviderConfig>) {
         this.configs = configs;
@@ -28,6 +30,17 @@ export class ProviderManager {
                     this.configs[ProviderType.OPENAI].defaultModel
                 )
             );
+        } else {
+            // Use mock provider if no API key
+            this.useMockProviders = true;
+            this.providers.set(
+                ProviderType.OPENAI,
+                new MockProvider(
+                    ProviderType.OPENAI,
+                    this.configs[ProviderType.OPENAI].defaultModel
+                )
+            );
+            console.log('Using mock OpenAI provider');
         }
 
         // Initialize Anthropic provider if API key is available
@@ -39,6 +52,16 @@ export class ProviderManager {
                     this.configs[ProviderType.ANTHROPIC].defaultModel
                 )
             );
+        } else if (this.useMockProviders) {
+            // Use mock provider if no API key
+            this.providers.set(
+                ProviderType.ANTHROPIC,
+                new MockProvider(
+                    ProviderType.ANTHROPIC,
+                    this.configs[ProviderType.ANTHROPIC].defaultModel
+                )
+            );
+            console.log('Using mock Anthropic provider');
         }
 
         // Initialize Google provider if API key is available
@@ -50,6 +73,20 @@ export class ProviderManager {
                     this.configs[ProviderType.GOOGLE].defaultModel
                 )
             );
+        } else if (this.useMockProviders) {
+            // Use mock provider if no API key
+            this.providers.set(
+                ProviderType.GOOGLE,
+                new MockProvider(
+                    ProviderType.GOOGLE,
+                    this.configs[ProviderType.GOOGLE].defaultModel
+                )
+            );
+            console.log('Using mock Google provider');
+        }
+
+        if (this.useMockProviders) {
+            console.log('Using mock providers for testing. Configure API keys in settings for real responses.');
         }
     }
 
@@ -83,36 +120,48 @@ export class ProviderManager {
             this.providers.delete(type);
 
             // Create new provider with updated config
-            switch (type) {
-                case ProviderType.OPENAI:
-                    this.providers.set(
-                        type,
-                        new OpenAIProvider(
-                            this.configs[type].apiKey!,
-                            this.configs[type].defaultModel
-                        )
-                    );
-                    break;
+            if (config.apiKey) {
+                switch (type) {
+                    case ProviderType.OPENAI:
+                        this.providers.set(
+                            type,
+                            new OpenAIProvider(
+                                this.configs[type].apiKey!,
+                                this.configs[type].defaultModel
+                            )
+                        );
+                        break;
 
-                case ProviderType.ANTHROPIC:
-                    this.providers.set(
-                        type,
-                        new AnthropicProvider(
-                            this.configs[type].apiKey!,
-                            this.configs[type].defaultModel
-                        )
-                    );
-                    break;
+                    case ProviderType.ANTHROPIC:
+                        this.providers.set(
+                            type,
+                            new AnthropicProvider(
+                                this.configs[type].apiKey!,
+                                this.configs[type].defaultModel
+                            )
+                        );
+                        break;
 
-                case ProviderType.GOOGLE:
-                    this.providers.set(
+                    case ProviderType.GOOGLE:
+                        this.providers.set(
+                            type,
+                            new GoogleProvider(
+                                this.configs[type].apiKey!,
+                                this.configs[type].defaultModel
+                            )
+                        );
+                        break;
+                }
+            } else if (this.useMockProviders) {
+                // Use mock provider if no API key is available
+                this.providers.set(
+                    type,
+                    new MockProvider(
                         type,
-                        new GoogleProvider(
-                            this.configs[type].apiKey!,
-                            this.configs[type].defaultModel
-                        )
-                    );
-                    break;
+                        this.configs[type].defaultModel
+                    )
+                );
+                console.log(`Using mock ${type} provider`);
             }
         }
     }

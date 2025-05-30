@@ -92,17 +92,17 @@
             }
         },
         "views": {
-            "panel": [
-                {
-                    "id": "poe-panel",
-                    "name": "Panel of Experts",
-                    "icon": "expert-panel"
-                }
-            ],
             "explorer": [
                 {
                     "id": "poe-sessions",
                     "name": "Expert Sessions"
+                }
+            ],
+            "view": [
+                {
+                    "id": "poe-panel",
+                    "name": "Panel of Experts",
+                    "icon": "resources/expert-panel.svg"
                 }
             ]
         }

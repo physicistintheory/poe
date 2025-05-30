@@ -307,11 +307,11 @@ export class ConversationOrchestrator {
     }
 
     /**
-     * Toggle auto-discuss mode
+     * Set auto-discuss mode
      */
     setAutoDiscuss(enabled: boolean): void {
         this.session.autoDiscuss = enabled;
-
+        
         // If enabling and currently waiting, start next round
         if (enabled && this.status === ConversationStatus.WAITING_USER) {
             this.startNextRound();
@@ -319,7 +319,14 @@ export class ConversationOrchestrator {
     }
 
     /**
-     * Set the maximum number of turns
+     * Check if auto-discuss mode is enabled
+     */
+    isAutoDiscussEnabled(): boolean {
+        return !!this.session.autoDiscuss;
+    }
+
+    /**
+     * Set maximum number of turns
      */
     setMaxTurns(maxTurns: number): void {
         this.maxTurns = maxTurns;
