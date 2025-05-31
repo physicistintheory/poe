@@ -1,14 +1,25 @@
 import * as vscode from 'vscode';
 import { ConversationOrchestrator } from '../orchestration/ConversationOrchestrator';
+import { SessionsTreeDataProvider } from './SessionsTreeDataProvider';
+import { ConversationSession } from '../types';
 
 // Reference to the shared output channel
 let outputChannel: vscode.OutputChannel;
+// Reference to the sessions provider for accessing sessions
+let sessionsProvider: SessionsTreeDataProvider | undefined;
 
 /**
  * Set the output channel for logging
  */
 export function setOutputChannel(channel: vscode.OutputChannel) {
     outputChannel = channel;
+}
+
+/**
+ * Set the sessions provider reference
+ */
+export function setSessionsProvider(provider: SessionsTreeDataProvider) {
+    sessionsProvider = provider;
 }
 
 /**
@@ -45,7 +56,34 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             });
         }
         
+        // Try to update the view immediately
         this._updateView();
+        
+        // If the view isn't available yet, try again after a short delay
+        if (!this._view) {
+            if (outputChannel) {
+                outputChannel.appendLine('View not available, will retry update in 1 second');
+            }
+            setTimeout(() => {
+                if (outputChannel) {
+                    outputChannel.appendLine('Retrying view update...');
+                }
+                this._updateView();
+                
+                // If still not available, try once more with a longer delay
+                if (!this._view) {
+                    if (outputChannel) {
+                        outputChannel.appendLine('View still not available, will retry update in 3 seconds');
+                    }
+                    setTimeout(() => {
+                        if (outputChannel) {
+                            outputChannel.appendLine('Final retry for view update...');
+                        }
+                        this._updateView();
+                    }, 3000);
+                }
+            }, 1000);
+        }
     }
 
     /**
@@ -60,6 +98,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     ) {
         if (outputChannel) {
             outputChannel.appendLine('PanelViewProvider.resolveWebviewView called');
+            outputChannel.appendLine(`WebviewView state: ${webviewView.visible ? 'visible' : 'not visible'}`);
         } else {
             console.log('PanelViewProvider.resolveWebviewView called');
         }
@@ -74,6 +113,17 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         // Set initial HTML content
         this._updateView();
 
+        // Listen for visibility changes
+        webviewView.onDidChangeVisibility(() => {
+            if (outputChannel) {
+                outputChannel.appendLine(`WebviewView visibility changed: ${webviewView.visible ? 'visible' : 'not visible'}`);
+            }
+            if (webviewView.visible) {
+                // Update view when it becomes visible
+                this._updateView();
+            }
+        });
+
         // Handle messages from the webview
         webviewView.webview.onDidReceiveMessage(message => {
             if (outputChannel) {
@@ -84,6 +134,8 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             // Handle message based on type
             if (message.type === 'sendMessage' && this._orchestrator) {
                 this._orchestrator.addUserMessage(message.text);
+            } else if (message.type === 'switchSession') {
+                this._handleSessionSwitch(message.sessionId);
             }
         });
         
@@ -92,6 +144,33 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         } else {
             console.log('PanelViewProvider.resolveWebviewView completed');
         }
+    }
+
+    /**
+     * Handle session switching
+     */
+    private _handleSessionSwitch(sessionId: string): void {
+        if (!sessionsProvider) {
+            if (outputChannel) {
+                outputChannel.appendLine('Cannot switch session: sessions provider not available');
+            }
+            return;
+        }
+
+        // Find the session in the sessions provider
+        const session = sessionsProvider['sessions'].find(s => s.id === sessionId);
+        if (!session) {
+            if (outputChannel) {
+                outputChannel.appendLine(`Session with ID ${sessionId} not found`);
+            }
+            return;
+        }
+
+        // Notify external components about session switch
+        vscode.commands.executeCommand('poe.switchSession', session);
+        
+        // Update the view
+        this._updateView();
     }
 
     /**
@@ -180,11 +259,30 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             console.log('PanelViewProvider._getHtmlContent: hasOrchestrator =', hasOrchestrator);
         }
         
-        const messages = hasOrchestrator && this._orchestrator ? this._orchestrator.getSession().messages || [] : [];
+        const currentSession = hasOrchestrator && this._orchestrator ? this._orchestrator.getSession() : undefined;
+        const messages = currentSession?.messages || [];
         if (outputChannel) {
             outputChannel.appendLine(`PanelViewProvider._getHtmlContent: Found ${messages.length} messages`);
         } else {
             console.log(`PanelViewProvider._getHtmlContent: Found ${messages.length} messages`);
+        }
+
+        // Get all available sessions from the sessions provider
+        const allSessions: ConversationSession[] = sessionsProvider ? sessionsProvider['sessions'] : [];
+        
+        // Generate session selector HTML
+        let sessionSelectorHtml = '';
+        if (allSessions.length > 0) {
+            sessionSelectorHtml = `
+            <div class="session-selector">
+                <label for="session-select">Select Session:</label>
+                <select id="session-select">
+                    ${allSessions.map(session => {
+                        const isSelected = currentSession && session.id === currentSession.id;
+                        return `<option value="${session.id}" ${isSelected ? 'selected' : ''}>${session.title}</option>`;
+                    }).join('')}
+                </select>
+            </div>`;
         }
 
         // Generate message HTML
@@ -252,10 +350,28 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             margin-top: 40px;
             color: #999;
         }
+        .session-selector {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #3a3a3a;
+            border-radius: 4px;
+        }
+        .session-selector select {
+            width: 100%;
+            padding: 6px;
+            background-color: #444;
+            color: #eee;
+            border: 1px solid #555;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
     <h1>Panel of Experts</h1>
+    
+    ${sessionSelectorHtml}
+    
     <div id="messages-container">
         ${messagesHtml}
     </div>
@@ -277,6 +393,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             const vscode = acquireVsCodeApi();
             const messageInput = document.getElementById('message-input');
             const sendButton = document.getElementById('send-button');
+            const sessionSelect = document.getElementById('session-select');
             
             if (sendButton && messageInput) {
                 sendButton.addEventListener('click', () => {
@@ -300,6 +417,18 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
                             });
                             messageInput.value = '';
                         }
+                    }
+                });
+            }
+            
+            if (sessionSelect) {
+                sessionSelect.addEventListener('change', (e) => {
+                    const sessionId = sessionSelect.value;
+                    if (sessionId) {
+                        vscode.postMessage({
+                            type: 'switchSession',
+                            sessionId: sessionId
+                        });
                     }
                 });
             }

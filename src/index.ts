@@ -3,7 +3,7 @@ import { ProviderManager } from './providers/ProviderManager';
 import { ConversationOrchestrator } from './orchestration/ConversationOrchestrator';
 import * as vscode from 'vscode';
 import { SessionsTreeDataProvider, SessionTreeItem } from './ui/SessionsTreeDataProvider';
-import { PanelViewProvider, setOutputChannel } from './ui/PanelViewProvider';
+import { PanelViewProvider, setOutputChannel, setSessionsProvider } from './ui/PanelViewProvider';
 
 // Default expert configurations
 const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
@@ -328,17 +328,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // Create plugin instance
     pluginInstance = new PoePlugin();
     
-    // Create and register the panel view provider first
-    outputChannel.appendLine('Creating and registering panel view provider...');
-    panelViewProvider = new PanelViewProvider(context.extensionUri);
-    const panelView = vscode.window.registerWebviewViewProvider(
-        'poe-panel',
-        panelViewProvider
-    );
-    context.subscriptions.push(panelView);
-    outputChannel.appendLine('Panel view provider registered with ID: poe-panel');
-
-    // Create and register the sessions tree data provider
+    // Create and register the sessions tree data provider first
     outputChannel.appendLine('Creating and registering sessions tree data provider...');
     sessionsProvider = new SessionsTreeDataProvider();
     const sessionsTreeView = vscode.window.createTreeView('poe-sessions', {
@@ -347,6 +337,19 @@ export function activate(context: vscode.ExtensionContext): void {
     });
     context.subscriptions.push(sessionsTreeView);
     outputChannel.appendLine('Sessions tree view registered with ID: poe-sessions');
+    
+    // Pass the sessions provider to the PanelViewProvider
+    setSessionsProvider(sessionsProvider);
+    
+    // Create and register the panel view provider
+    outputChannel.appendLine('Creating and registering panel view provider...');
+    panelViewProvider = new PanelViewProvider(context.extensionUri);
+    const panelView = vscode.window.registerWebviewViewProvider(
+        'poe-panel',
+        panelViewProvider
+    );
+    context.subscriptions.push(panelView);
+    outputChannel.appendLine('Panel view provider registered with ID: poe-panel');
 
     // Initialize the plugin after providers are registered
     pluginInstance.initialize().then(() => {
@@ -427,34 +430,88 @@ export function activate(context: vscode.ExtensionContext): void {
         })
     );
 
-    // Add code to try to activate and focus the panel view
+    // Register a command to switch between sessions
+    context.subscriptions.push(
+        vscode.commands.registerCommand('poe.switchSession', (session) => {
+            if (pluginInstance && session) {
+                outputChannel.appendLine(`Switching to session: ${session.id}`);
+                
+                // Create a new conversation with the selected session's properties
+                pluginInstance.createNewConversation({
+                    title: session.title,
+                    goal: session.goal
+                });
+                
+                // Update the panel view provider with the new orchestrator
+                if (pluginInstance.getOrchestrator() && panelViewProvider) {
+                    outputChannel.appendLine('Updating panel view provider with orchestrator after switching session');
+                    panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
+                }
+            }
+        })
+    );
+
     // Try to show the panel view when activated
     // First show the view container in the activity bar
     outputChannel.appendLine('Attempting to show the Panel of Experts view container');
-    setTimeout(() => {
+    
+    // Use a function to make multiple attempts to show the view
+    const attemptToShowPanel = (attempt = 1) => {
+        outputChannel.appendLine(`Attempt ${attempt} to show panel view`);
+        
+        // First try to activate the view container
         vscode.commands.executeCommand('workbench.view.extension.poe-container')
             .then(() => {
                 outputChannel.appendLine('Successfully focused the Panel of Experts view container');
-                // Then focus the specific panel view
+                
+                // Give a little time for the view container to initialize
                 setTimeout(() => {
+                    // Then try to show the panel view
                     vscode.commands.executeCommand('poe-panel.focus')
                         .then(() => {
                             outputChannel.appendLine('Successfully focused the Panel of Experts panel view');
+                            
+                            // Also show the start panel command
+                            if (attempt === 1) {
+                                setTimeout(() => {
+                                    vscode.commands.executeCommand('poe.startPanel')
+                                        .then(() => {
+                                            outputChannel.appendLine('Started Panel of Experts discussion');
+                                        })
+                                        .then(undefined, (error: Error) => {
+                                            outputChannel.appendLine('Error starting discussion: ' + error.message);
+                                        });
+                                }, 1000);
+                            }
                         })
                         .then(undefined, (error: Error) => {
                             outputChannel.appendLine('Error focusing panel view: ' + error.message);
+                            
+                            // If we failed to focus and we haven't tried too many times, try again
+                            if (attempt < 3) {
+                                setTimeout(() => attemptToShowPanel(attempt + 1), 2000 * attempt);
+                            }
                         });
                 }, 500);
             })
             .then(undefined, (error: Error) => {
                 outputChannel.appendLine('Error focusing view container: ' + error.message);
+                
                 // Try showing just the panel view directly
                 vscode.commands.executeCommand('poe-panel.focus')
                     .then(undefined, (error2: Error) => {
                         outputChannel.appendLine('Error focusing panel view directly: ' + error2.message);
+                        
+                        // If we failed on both approaches and haven't tried too many times, try again
+                        if (attempt < 3) {
+                            setTimeout(() => attemptToShowPanel(attempt + 1), 2000 * attempt);
+                        }
                     });
             });
-    }, 1000);
+    };
+    
+    // Start the first attempt after a short delay to allow extension to initialize
+    setTimeout(() => attemptToShowPanel(), 1500);
     
     outputChannel.appendLine('Panel of Experts plugin activated');
 }

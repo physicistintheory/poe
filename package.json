@@ -37,17 +37,15 @@
 			]
 		},
 		"views": {
-			"explorer": [
-				{
-					"id": "poe-sessions",
-					"name": "Expert Sessions"
-				}
-			],
 			"poe-container": [
 				{
 					"id": "poe-panel",
 					"name": "Panel of Experts",
 					"icon": "resources/expert-panel.svg"
+				},
+				{
+					"id": "poe-sessions",
+					"name": "Expert Sessions"
 				}
 			]
 		},
