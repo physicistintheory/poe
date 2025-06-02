@@ -30,17 +30,24 @@ export class SessionsTreeDataProvider implements vscode.TreeDataProvider<Session
     private _onDidChangeTreeData: vscode.EventEmitter<SessionTreeItem | undefined> = new vscode.EventEmitter<SessionTreeItem | undefined>();
     readonly onDidChangeTreeData: vscode.Event<SessionTreeItem | undefined> = this._onDidChangeTreeData.event;
     
-    private sessions: ConversationSession[] = [];
+    private _sessions: ConversationSession[] = [];
     
     constructor() {
         // Initialize with empty sessions list
     }
     
     /**
+     * Get all sessions
+     */
+    get sessions(): ConversationSession[] {
+        return this._sessions;
+    }
+    
+    /**
      * Update the list of sessions and refresh the view
      */
     updateSessions(sessions: ConversationSession[]): void {
-        this.sessions = [...sessions];
+        this._sessions = [...sessions];
         this._onDidChangeTreeData.fire(undefined);
     }
     
@@ -48,7 +55,7 @@ export class SessionsTreeDataProvider implements vscode.TreeDataProvider<Session
      * Add a new session to the list
      */
     addSession(session: ConversationSession): void {
-        this.sessions.push(session);
+        this._sessions.push(session);
         this._onDidChangeTreeData.fire(undefined);
     }
     
@@ -56,7 +63,7 @@ export class SessionsTreeDataProvider implements vscode.TreeDataProvider<Session
      * Remove a session from the list
      */
     removeSession(sessionId: string): void {
-        this.sessions = this.sessions.filter(s => s.id !== sessionId);
+        this._sessions = this._sessions.filter(s => s.id !== sessionId);
         this._onDidChangeTreeData.fire(undefined);
     }
     
@@ -77,7 +84,7 @@ export class SessionsTreeDataProvider implements vscode.TreeDataProvider<Session
         } else {
             // Root: return all sessions
             return Promise.resolve(
-                this.sessions.map(
+                this._sessions.map(
                     session => new SessionTreeItem(
                         session, 
                         vscode.TreeItemCollapsibleState.None

@@ -9,7 +9,10 @@
 		"vscode": "^1.81.0"
 	},
 	"activationEvents": [
+		"onStartupFinished",
 		"onCommand:poe.startPanel",
+		"onCommand:poe.toggleAutoDiscuss",
+		"onCommand:poe.resetConversation",
 		"onView:poe-panel"
 	],
 	"contributes": {
@@ -41,11 +44,8 @@
 				{
 					"id": "poe-panel",
 					"name": "Panel of Experts",
-					"icon": "resources/expert-panel.svg"
-				},
-				{
-					"id": "poe-sessions",
-					"name": "Expert Sessions"
+					"icon": "resources/expert-panel.svg",
+					"type": "webview"
 				}
 			]
 		},

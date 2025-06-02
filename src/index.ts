@@ -1,9 +1,8 @@
-import { ProviderType, PluginConfig, ExpertAgentConfig, ModeratorConfig } from './types';
+import { ProviderType, PluginConfig, ExpertAgentConfig, ModeratorConfig, ConversationSession } from './types';
 import { ProviderManager } from './providers/ProviderManager';
 import { ConversationOrchestrator } from './orchestration/ConversationOrchestrator';
 import * as vscode from 'vscode';
-import { SessionsTreeDataProvider, SessionTreeItem } from './ui/SessionsTreeDataProvider';
-import { PanelViewProvider, setOutputChannel, setSessionsProvider } from './ui/PanelViewProvider';
+import { PanelViewProvider, setOutputChannel } from './ui/PanelViewProvider';
 
 // Default expert configurations
 const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
@@ -251,17 +250,6 @@ export class PoePlugin {
             title: sessionTitle,
             goal: 'New discussion started via command'
         });
-        
-        // Make sure to add the new session to the tree view
-        if (this.orchestrator && sessionsProvider) {
-            const session = this.orchestrator.getSession();
-            sessionsProvider.addSession(session);
-            
-            // Log to console for debugging
-            console.log('Added new session to tree view:', session.id);
-        } else {
-            console.error('Failed to add session to tree view - orchestrator or sessionsProvider not available');
-        }
     }
 
     /**
@@ -291,24 +279,11 @@ export class PoePlugin {
         });
         
         vscode.window.showInformationMessage('Conversation has been reset');
-        
-        // Update the session in the tree view
-        if (this.orchestrator && sessionsProvider) {
-            const session = this.orchestrator.getSession();
-            if (session) {
-                // Add as a new session rather than replacing existing ones
-                sessionsProvider.addSession(session);
-                console.log('Added reset session to tree view:', session.id);
-            }
-        } else {
-            console.error('Failed to update session in tree view after reset');
-        }
     }
 }
 
 // Plugin singleton instance
 let pluginInstance: PoePlugin | undefined;
-let sessionsProvider: SessionsTreeDataProvider | undefined;
 let panelViewProvider: PanelViewProvider | undefined;
 let outputChannel: vscode.OutputChannel;
 
@@ -328,49 +303,50 @@ export function activate(context: vscode.ExtensionContext): void {
     // Create plugin instance
     pluginInstance = new PoePlugin();
     
-    // Create and register the sessions tree data provider first
-    outputChannel.appendLine('Creating and registering sessions tree data provider...');
-    sessionsProvider = new SessionsTreeDataProvider();
-    const sessionsTreeView = vscode.window.createTreeView('poe-sessions', {
-        treeDataProvider: sessionsProvider,
-        showCollapseAll: true
-    });
-    context.subscriptions.push(sessionsTreeView);
-    outputChannel.appendLine('Sessions tree view registered with ID: poe-sessions');
-    
-    // Pass the sessions provider to the PanelViewProvider
-    setSessionsProvider(sessionsProvider);
-    
     // Create and register the panel view provider
     outputChannel.appendLine('Creating and registering panel view provider...');
     panelViewProvider = new PanelViewProvider(context.extensionUri);
+    
     const panelView = vscode.window.registerWebviewViewProvider(
         'poe-panel',
-        panelViewProvider
+        panelViewProvider,
+        {
+            webviewOptions: {
+                retainContextWhenHidden: true
+            }
+        }
     );
     context.subscriptions.push(panelView);
     outputChannel.appendLine('Panel view provider registered with ID: poe-panel');
 
     // Initialize the plugin after providers are registered
     pluginInstance.initialize().then(() => {
-        outputChannel.appendLine('Plugin initialized, setting orchestrator on panel view provider');
+        outputChannel.appendLine('Plugin initialized, orchestrator will be set when view is ready');
         
-        // Set the orchestrator on the panel view provider
-        if (pluginInstance && panelViewProvider) {
-            const orchestrator = pluginInstance.getOrchestrator();
-            if (orchestrator) {
-                outputChannel.appendLine('Setting orchestrator on panel view provider');
-                panelViewProvider.setOrchestrator(orchestrator);
-                
-                // Add the current session to the tree view
-                if (sessionsProvider) {
-                    const session = orchestrator.getSession();
-                    outputChannel.appendLine('Adding initial session to tree view: ' + session.id);
-                    sessionsProvider.addSession(session);
+        // Try to set the orchestrator immediately if it's already available
+        if (pluginInstance && pluginInstance.getOrchestrator() && panelViewProvider) {
+            outputChannel.appendLine('Setting initial orchestrator on panel view');
+            panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
+        }
+        
+        // Also register for view ready event to ensure orchestrator is set
+        if (panelViewProvider) {
+            panelViewProvider.onViewReady(() => {
+                outputChannel.appendLine('Panel view is ready, setting orchestrator if available');
+                if (pluginInstance) {
+                    const orchestrator = pluginInstance.getOrchestrator();
+                    if (orchestrator) {
+                        outputChannel.appendLine('Setting orchestrator on panel view now that view is ready');
+                        if (panelViewProvider) {
+                            panelViewProvider.setOrchestrator(orchestrator);
+                        }
+                    } else {
+                        outputChannel.appendLine('No orchestrator available when view became ready');
+                        // Start a panel to ensure we have an orchestrator
+                        vscode.commands.executeCommand('poe.startPanel');
+                    }
                 }
-            } else {
-                outputChannel.appendLine('No orchestrator available after plugin initialization');
-            }
+            });
         }
     }).catch(err => {
         outputChannel.appendLine('Failed to initialize POE plugin: ' + err);
@@ -386,14 +362,6 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (pluginInstance.getOrchestrator() && panelViewProvider) {
                     outputChannel.appendLine('Updating panel view provider with new orchestrator after startPanel command');
                     panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
-                }
-                
-                // Add the session to the tree view
-                if (pluginInstance.getOrchestrator() && sessionsProvider) {
-                    const session = pluginInstance.getOrchestrator()?.getSession();
-                    if (session) {
-                        sessionsProvider.addSession(session);
-                    }
                 }
             }
         })
@@ -416,15 +384,6 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (pluginInstance.getOrchestrator() && panelViewProvider) {
                     outputChannel.appendLine('Updating panel view provider with new orchestrator after resetConversation command');
                     panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
-                }
-                
-                // Update the session in the tree view
-                if (pluginInstance.getOrchestrator() && sessionsProvider) {
-                    const session = pluginInstance.getOrchestrator()?.getSession();
-                    if (session) {
-                        // Add as a new session rather than replacing existing ones
-                        sessionsProvider.addSession(session);
-                    }
                 }
             }
         })
@@ -466,12 +425,12 @@ export function activate(context: vscode.ExtensionContext): void {
                 
                 // Give a little time for the view container to initialize
                 setTimeout(() => {
-                    // Then try to show the panel view
+                    // Focus the panel view
                     vscode.commands.executeCommand('poe-panel.focus')
                         .then(() => {
                             outputChannel.appendLine('Successfully focused the Panel of Experts panel view');
                             
-                            // Also show the start panel command
+                            // Start a panel discussion if this is the first attempt
                             if (attempt === 1) {
                                 setTimeout(() => {
                                     vscode.commands.executeCommand('poe.startPanel')
