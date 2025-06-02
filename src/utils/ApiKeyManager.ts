@@ -5,16 +5,25 @@ import { ProviderType } from '../types';
  */
 export class ApiKeyManager {
     private static instance: ApiKeyManager;
-    private cursor: any; // Cursor API instance
+    private cursor: {
+        getConfiguration: (key: string) => string | undefined;
+        updateConfiguration: (key: string, value: string) => Promise<void>;
+    };
 
-    private constructor(cursor: any) {
+    private constructor(cursor: {
+        getConfiguration: (key: string) => string | undefined;
+        updateConfiguration: (key: string, value: string) => Promise<void>;
+    }) {
         this.cursor = cursor;
     }
 
     /**
      * Get singleton instance
      */
-    static getInstance(cursor: any): ApiKeyManager {
+    static getInstance(cursor: {
+        getConfiguration: (key: string) => string | undefined;
+        updateConfiguration: (key: string, value: string) => Promise<void>;
+    }): ApiKeyManager {
         if (!ApiKeyManager.instance) {
             ApiKeyManager.instance = new ApiKeyManager(cursor);
         }

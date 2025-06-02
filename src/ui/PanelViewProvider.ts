@@ -52,11 +52,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
      * Required method to resolve the webview view
      */
     resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        _context: vscode.WebviewViewResolveContext,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        _token: vscode.CancellationToken
+        webviewView: vscode.WebviewView
     ) {
         if (outputChannel) {
             outputChannel.appendLine('PanelViewProvider.resolveWebviewView called');
@@ -135,7 +131,8 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     /**
      * Generate HTML content for error cases
      */
-    private _getErrorHtml(error: any): string {
+    private _getErrorHtml(error: Error | unknown): string {
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
         return `<!DOCTYPE html>
 <html>
 <head>
@@ -161,7 +158,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     <h1>Panel of Experts</h1>
     <div class="error">
         <h3>Error loading panel content</h3>
-        <p>${error?.message || 'An unknown error occurred'}</p>
+        <p>${errorMessage}</p>
         <p>Try restarting the Panel of Experts or check the extension logs.</p>
     </div>
 </body>
