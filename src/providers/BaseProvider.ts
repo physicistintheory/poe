@@ -57,7 +57,7 @@ export abstract class BaseProvider {
      * @param messages Internal message format
      * @returns Provider-specific format
      */
-    abstract formatMessages(messages: { role: string; content: string }[]): any;
+    abstract formatMessages(messages: { role: string; content: string }[]): unknown;
 
     /**
      * Check if the API key is valid by making a simple request

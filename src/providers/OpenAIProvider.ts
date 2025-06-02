@@ -88,7 +88,7 @@ export class OpenAIProvider extends BaseProvider {
         }
     }
 
-    formatMessages(messages: { role: string; content: string }[]): any {
+    formatMessages(messages: { role: string; content: string }[]): { role: 'system' | 'user' | 'assistant'; content: string }[] {
         // OpenAI already uses {role, content} format, so we just return as is
         // but ensure the roles are valid OpenAI roles
         return messages.map(message => {
@@ -98,7 +98,7 @@ export class OpenAIProvider extends BaseProvider {
                 role = 'assistant'; // Default to assistant for expert/moderator
             }
             return {
-                role,
+                role: role as 'system' | 'user' | 'assistant',
                 content: message.content
             };
         });

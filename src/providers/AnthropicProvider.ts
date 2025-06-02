@@ -108,7 +108,7 @@ export class AnthropicProvider extends BaseProvider {
         }
     }
 
-    formatMessages(messages: { role: string; content: string }[]): any {
+    formatMessages(messages: { role: string; content: string }[]): { role: 'user' | 'assistant'; content: string }[] {
         // Filter out system messages as they are handled separately
         return messages
             .filter(message => message.role !== 'system')

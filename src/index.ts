@@ -119,17 +119,17 @@ export class PoePlugin {
             const anthropicKey = vscode.workspace.getConfiguration('poe.apiKeys').get('anthropic') as string;
             const googleKey = vscode.workspace.getConfiguration('poe.apiKeys').get('google') as string;
 
-            // Update provider configs with API keys
-            if (openaiKey) {
-                this.config.providers[ProviderType.OPENAI].apiKey = openaiKey;
+            // Update provider configs with API keys, only if provider exists
+            if (openaiKey && this.config.providers[ProviderType.OPENAI]) {
+                this.config.providers[ProviderType.OPENAI]!.apiKey = openaiKey;
             }
             
-            if (anthropicKey) {
-                this.config.providers[ProviderType.ANTHROPIC].apiKey = anthropicKey;
+            if (anthropicKey && this.config.providers[ProviderType.ANTHROPIC]) {
+                this.config.providers[ProviderType.ANTHROPIC]!.apiKey = anthropicKey;
             }
             
-            if (googleKey) {
-                this.config.providers[ProviderType.GOOGLE].apiKey = googleKey;
+            if (googleKey && this.config.providers[ProviderType.GOOGLE]) {
+                this.config.providers[ProviderType.GOOGLE]!.apiKey = googleKey;
             }
 
             console.log('Loaded API keys from settings:', {
