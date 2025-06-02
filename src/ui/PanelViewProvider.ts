@@ -17,6 +17,7 @@ export function setOutputChannel(channel: vscode.OutputChannel) {
 export class PanelViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private _orchestrator?: ConversationOrchestrator;
+    private _onViewReady = new vscode.EventEmitter<void>();
 
     constructor(private readonly _extensionUri: vscode.Uri) {
         if (outputChannel) {
@@ -56,37 +57,54 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     ) {
         if (outputChannel) {
             outputChannel.appendLine('PanelViewProvider.resolveWebviewView called');
+            outputChannel.appendLine(`WebviewView state: ${webviewView.visible ? 'visible' : 'not visible'}`);
         } else {
             console.log('PanelViewProvider.resolveWebviewView called');
         }
-        this._view = webviewView;
-
-        // Set options for the webview
-        webviewView.webview.options = {
-            enableScripts: true,
-            localResourceRoots: [this._extensionUri]
-        };
-
-        // Set initial HTML content
-        this._updateView();
-
-        // Handle messages from the webview
-        webviewView.webview.onDidReceiveMessage(message => {
-            if (outputChannel) {
-                outputChannel.appendLine('Received message from webview: ' + JSON.stringify(message));
-            } else {
-                console.log('Received message from webview:', message);
-            }
-            // Handle message based on type
-            if (message.type === 'sendMessage' && this._orchestrator) {
-                this._orchestrator.addUserMessage(message.text);
-            }
-        });
         
-        if (outputChannel) {
-            outputChannel.appendLine('PanelViewProvider.resolveWebviewView completed');
-        } else {
-            console.log('PanelViewProvider.resolveWebviewView completed');
+        try {
+            this._view = webviewView;
+
+            // Set options for the webview
+            webviewView.webview.options = {
+                enableScripts: true,
+                localResourceRoots: [this._extensionUri]
+            };
+
+            // Set initial content
+            webviewView.webview.html = this._getHtmlContent();
+            
+            // Notify that the view is ready
+            this._onViewReady.fire();
+
+            // Handle messages from the webview
+            webviewView.webview.onDidReceiveMessage(message => {
+                if (outputChannel) {
+                    outputChannel.appendLine('Received message from webview: ' + JSON.stringify(message));
+                } else {
+                    console.log('Received message from webview:', message);
+                }
+                // Handle message based on type
+                if (message.type === 'sendMessage' && this._orchestrator) {
+                    this._orchestrator.addUserMessage(message.text);
+                }
+            });
+            
+            if (outputChannel) {
+                outputChannel.appendLine('PanelViewProvider.resolveWebviewView completed');
+            } else {
+                console.log('PanelViewProvider.resolveWebviewView completed');
+            }
+        } catch (error) {
+            if (outputChannel) {
+                outputChannel.appendLine('Error updating view: ' + error);
+            } else {
+                console.error('Error updating view:', error);
+            }
+            // Provide a fallback UI in case of error
+            if (this._view) {
+                this._view.webview.html = this._getErrorHtml(error);
+            }
         }
     }
 
