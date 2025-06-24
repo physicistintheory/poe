@@ -11,7 +11,6 @@
 	"activationEvents": [
 		"onStartupFinished",
 		"onCommand:poe.startPanel",
-		"onCommand:poe.toggleAutoDiscuss",
 		"onCommand:poe.resetConversation",
 		"onView:poe-panel"
 	],

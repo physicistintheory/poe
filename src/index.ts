@@ -1,6 +1,6 @@
 import { ProviderType, PluginConfig, ExpertAgentConfig, ModeratorConfig, ConversationSession } from './types';
 import { ProviderManager } from './providers/ProviderManager';
-import { ConversationOrchestrator } from './orchestration/ConversationOrchestrator';
+import { ConversationOrchestrator, setConversationOutputChannel } from './orchestration/ConversationOrchestrator';
 import * as vscode from 'vscode';
 import { PanelViewProvider, setOutputChannel } from './ui/PanelViewProvider';
 
@@ -191,7 +191,7 @@ export class PoePlugin {
                 experts,
                 moderator,
                 providers,
-                this.config.maxConversationHistoryLength
+                this.config.maxConversationHistoryLength,
             );
             
             console.log('Created new conversation orchestrator successfully');
@@ -297,6 +297,7 @@ export function activate(context: vscode.ExtensionContext): void {
     
     // Pass the output channel to the PanelViewProvider
     setOutputChannel(outputChannel);
+    setConversationOutputChannel(outputChannel);
     
     outputChannel.appendLine('Activating Panel of Experts plugin');
     

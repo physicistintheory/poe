@@ -122,23 +122,9 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             // Notify that the view is ready
             this._onViewReady.fire();
             
-            // Debug logging for webview
-            if (outputChannel) {
-                outputChannel.appendLine('Webview view HTML content set');
-                if (this._orchestrator) {
-                    outputChannel.appendLine('We have an orchestrator at view resolve time');
-                } else {
-                    outputChannel.appendLine('No orchestrator at view resolve time');
-                }
-                
-                outputChannel.appendLine(`Sessions available: ${this._sessions.length}`);
-            }
-
             // Listen for visibility changes
             webviewView.onDidChangeVisibility(() => {
-                if (outputChannel) {
-                    outputChannel.appendLine(`WebviewView visibility changed: ${webviewView.visible ? 'visible' : 'not visible'}`);
-                }
+                
                 if (webviewView.visible) {
                     // Update view when it becomes visible
                     this._updateView();
@@ -147,11 +133,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
 
             // Handle messages from the webview
             webviewView.webview.onDidReceiveMessage(message => {
-                if (outputChannel) {
-                    outputChannel.appendLine('Received message from webview: ' + JSON.stringify(message));
-                } else {
-                    console.log('Received message from webview:', message);
-                }
+                
                 // Handle message based on type
                 if (message.type === 'sendMessage' && this._orchestrator) {
                     this._orchestrator.addUserMessage(message.text);
@@ -161,7 +143,6 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
                     this._handleCreateSession();
                 } else if (message.type === 'viewReady') {
                     // The webview is fully loaded and ready
-                    outputChannel?.appendLine('Webview reported it is ready');
                     this._updateView();
                 }
             });
@@ -233,19 +214,10 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         }
 
         try {
-            if (outputChannel) {
-                outputChannel.appendLine('PanelViewProvider._updateView: Updating HTML content');
-            } else {
-                console.log('PanelViewProvider._updateView: Updating HTML content');
-            }
             // Create HTML content
             const html = this._getHtmlContent();
             this._view.webview.html = html;
-            if (outputChannel) {
-                outputChannel.appendLine('PanelViewProvider._updateView: HTML content set');
-            } else {
-                console.log('PanelViewProvider._updateView: HTML content set');
-            }
+            
         } catch (error) {
             if (outputChannel) {
                 outputChannel.appendLine('Error updating view: ' + error);
@@ -309,29 +281,13 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         try {
             // Check if we have an orchestrator
             const hasOrchestrator = !!this._orchestrator;
-            if (outputChannel) {
-                outputChannel.appendLine('PanelViewProvider._getHtmlContent: hasOrchestrator = ' + hasOrchestrator);
-            } else {
-                console.log('PanelViewProvider._getHtmlContent: hasOrchestrator =', hasOrchestrator);
-            }
             
             const currentSession = hasOrchestrator && this._orchestrator ? this._orchestrator.getSession() : undefined;
             const messages = currentSession?.messages || [];
-            if (outputChannel) {
-                outputChannel.appendLine(`PanelViewProvider._getHtmlContent: Found ${messages.length} messages in current session`);
-            } else {
-                console.log(`PanelViewProvider._getHtmlContent: Found ${messages.length} messages`);
-            }
-
+            
             // Get all available sessions
             const allSessions: ConversationSession[] = this._sessions;
             
-            // Log session count
-            if (outputChannel) {
-                outputChannel.appendLine(`PanelViewProvider._getHtmlContent: Found ${allSessions.length} available sessions`);
-            } else {
-                console.log(`PanelViewProvider._getHtmlContent: Found ${allSessions.length} available sessions`);
-            }
             
             // Generate session selector HTML
             let sessionSelectorHtml = '';
@@ -359,11 +315,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             // Generate message HTML
             let messagesHtml = '';
             if (hasOrchestrator && messages.length > 0) {
-                if (outputChannel) {
-                    outputChannel.appendLine('PanelViewProvider._getHtmlContent: Generating messages HTML');
-                } else {
-                    console.log('PanelViewProvider._getHtmlContent: Generating messages HTML');
-                }
+                
                 messagesHtml = messages.map(msg => {
                     const role = msg.sender.role.toLowerCase();
                     const id = msg.sender.id;
@@ -387,12 +339,6 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
                     <p>Use the command palette to start a new panel discussion.</p>
                     <p><code>Cmd+Shift+P</code> → "Start Panel of Experts Discussion"</p>
                 </div>`;
-            }
-
-            if (outputChannel) {
-                outputChannel.appendLine('PanelViewProvider._getHtmlContent: Completed generating HTML content');
-            } else {
-                console.log('PanelViewProvider._getHtmlContent: Completed generating HTML content');
             }
             
             // Create a simple HTML structure for testing

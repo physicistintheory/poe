@@ -10,7 +10,13 @@ import {
 import { ExpertAgent } from '../agents/ExpertAgent';
 import { ModeratorAgent } from '../agents/ModeratorAgent';
 import { BaseProvider } from '../providers/BaseProvider';
+import * as vscode from 'vscode';
+let outputChannel: vscode.OutputChannel;
+export function setConversationOutputChannel(channel: vscode.OutputChannel) {
+    outputChannel = channel;
+}
 
+// Reference to the shared output channel
 /**
  * Manages the conversation flow between multiple expert agents and a moderator
  */
@@ -46,7 +52,7 @@ export class ConversationOrchestrator {
             experts: experts,
             moderator: moderatorConfig,
             isActive: false,
-            autoDiscuss: sessionConfig.autoDiscuss || false,
+            autoDiscuss: sessionConfig.autoDiscuss || true, // default to true so discusssions can start after the first user utterance
             maxTurns: sessionConfig.maxTurns || this.maxTurns
         };
 
@@ -67,7 +73,7 @@ export class ConversationOrchestrator {
             if (!provider) {
                 throw new Error(`Provider ${expertConfig.provider} not found for expert ${expertConfig.name}`);
             }
-
+            outputChannel.appendLine(`Created expert2: ${expertConfig.name}`)
             return new ExpertAgent(expertConfig, provider);
         });
     }
@@ -112,6 +118,7 @@ export class ConversationOrchestrator {
         this.notifyMessageListeners(message);
 
         // If auto-discuss is enabled, start the next round
+        outputChannel.appendLine(`KBUX message received, autodiscuss: ${this.session.autoDiscuss}`)
         if (this.session.autoDiscuss) {
             this.startNextRound();
         } else {
@@ -123,6 +130,7 @@ export class ConversationOrchestrator {
      * Start a new discussion round
      */
     async startNextRound(): Promise<void> {
+        outputChannel.appendLine(`KBUX starting next round, status ${this.status}`)
         if (this.status === ConversationStatus.PROCESSING) {
             return; // Already processing
         }
@@ -166,22 +174,24 @@ export class ConversationOrchestrator {
      * Get responses from all expert agents
      */
     private async getAllExpertResponses(): Promise<void> {
-        // Get responses from all experts in parallel
-        const expertPromises = this.experts.map(expert =>
-            this.getExpertResponse(expert)
-        );
-
-        await Promise.all(expertPromises);
+        // Call each expert incrementally so they can respond to each other
+        for(let expert of this.experts) {
+            await this.getExpertResponse(expert);
+        }
     }
 
     /**
      * Get a response from a specific expert
      */
     private async getExpertResponse(expert: ExpertAgent): Promise<void> {
+        outputChannel.appendLine(`Got expert response from ${expert.getName()}}`);
+
         const message = await expert.generateMessage(
             this.session.messages,
             true, // Stream response
-            () => {
+            (chunk: string) => {
+                outputChannel.appendLine(`Got expert response from ${expert.getName()}} with the message ${chunk}`)
+
                 // Handle streaming updates
                 this.notifyMessageUpdate();
             }
