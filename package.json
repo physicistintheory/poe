@@ -32,10 +32,65 @@
 		"configuration": {
 			"title": "Panel of Experts",
 			"properties": {
+				"poe.openaiApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "OpenAI API Key for GPT models",
+					"scope": "application"
+				},
+				"poe.openaiBaseUrl": {
+					"type": "string",
+					"default": "https://api.openai.com/v1",
+					"description": "OpenAI API base URL (for custom endpoints)",
+					"scope": "application"
+				},
+				"poe.anthropicApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "Anthropic API Key for Claude models",
+					"scope": "application"
+				},
 				"poe.geminiApiKey": {
 					"type": "string",
 					"default": "",
 					"description": "Gemini API Key for Google AI services",
+					"scope": "application"
+				},
+				"poe.ollamaBaseUrl": {
+					"type": "string",
+					"default": "http://localhost:11434",
+					"description": "Ollama server base URL",
+					"scope": "application"
+				},
+				"poe.ollamaTimeout": {
+					"type": "number",
+					"default": 30000,
+					"description": "Timeout for Ollama requests in milliseconds",
+					"scope": "application"
+				},
+				"poe.defaultProvider": {
+					"type": "string",
+					"default": "openai",
+					"description": "Default AI provider to use",
+					"enum": ["openai", "anthropic", "gemini", "ollama"],
+					"enumDescriptions": [
+						"OpenAI GPT models",
+						"Anthropic Claude models",
+						"Google Gemini models",
+						"Local Ollama models"
+					],
+					"scope": "application"
+				},
+				"poe.maxTokens": {
+					"type": "number",
+					"default": 4000,
+					"description": "Maximum tokens for AI responses",
+					"scope": "application"
+				},
+				"poe.temperature": {
+					"type": "number",
+					"default": 0.7,
+					"description": "Temperature setting for AI responses (0.0-2.0)",
 					"scope": "application"
 				}
 			}

@@ -7,7 +7,7 @@ import { Readable } from 'stream';
 export class OllamaProvider extends BaseProvider {
     private baseUrl: string;
 
-    constructor(apiKey: string = '', defaultModel: string = 'llama2:3b') {
+    constructor(apiKey: string = '', defaultModel: string = '') {
         super(apiKey, defaultModel);
         this.baseUrl = 'http://localhost:11434/api';
     }
@@ -23,7 +23,7 @@ export class OllamaProvider extends BaseProvider {
             return data.models.map((model: { name: string }) => model.name);
         } catch (error) {
             console.error('Error fetching Ollama models:', error);
-            return ['llama2:3b']; // Fallback to default model
+            return []; // No fallback - return empty array if API call fails
         }
     }
 

@@ -31,20 +31,20 @@ export class ApiKeyManager {
     }
 
     /**
-     * Get API key for a provider from Cursor settings
+     * Get API key for a provider from Cursor's configuration
      */
     getApiKey(provider: ProviderType): string | undefined {
         try {
             // Try to get API key from Cursor's configuration
             switch (provider) {
                 case ProviderType.OPENAI:
-                    return this.cursor.getConfiguration('poe.apiKeys.openai');
+                    return this.cursor.getConfiguration('poe.openaiApiKey');
                 case ProviderType.ANTHROPIC:
-                    return this.cursor.getConfiguration('poe.apiKeys.anthropic');
+                    return this.cursor.getConfiguration('poe.anthropicApiKey');
                 case ProviderType.GOOGLE:
                     return this.cursor.getConfiguration('poe.geminiApiKey');
                 case ProviderType.OLLAMA:
-                    return this.cursor.getConfiguration('poe.apiKeys.ollama');
+                    return this.cursor.getConfiguration('poe.ollamaBaseUrl');
                 default:
                     return undefined;
             }
@@ -55,7 +55,7 @@ export class ApiKeyManager {
     }
 
     /**
-     * Set API key for a provider in Cursor settings
+     * Set API key for a provider in Cursor's configuration
      */
     async setApiKey(provider: ProviderType, apiKey: string): Promise<boolean> {
         try {
@@ -64,16 +64,16 @@ export class ApiKeyManager {
 
             switch (provider) {
                 case ProviderType.OPENAI:
-                    configKey = 'poe.apiKeys.openai';
+                    configKey = 'poe.openaiApiKey';
                     break;
                 case ProviderType.ANTHROPIC:
-                    configKey = 'poe.apiKeys.anthropic';
+                    configKey = 'poe.anthropicApiKey';
                     break;
                 case ProviderType.GOOGLE:
                     configKey = 'poe.geminiApiKey';
                     break;
                 case ProviderType.OLLAMA:
-                    configKey = 'poe.apiKeys.ollama';
+                    configKey = 'poe.ollamaBaseUrl';
                     break;
                 default:
                     return false;

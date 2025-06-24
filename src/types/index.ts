@@ -38,6 +38,8 @@ export interface ExpertAgentConfig {
     specialization: string; // One-line description of what this expert specializes in
     avatarUrl?: string; // Optional URL to an avatar image
     color?: string; // Optional color code for UI
+    temperature?: number; // Temperature setting for this expert (0.0-2.0)
+    maxTokens?: number; // Maximum tokens for this expert's responses
 }
 
 // Moderator agent configuration
@@ -100,4 +102,15 @@ export enum ConversationStatus {
     WAITING_USER = 'waiting_user',
     PROCESSING = 'processing',
     ERROR = 'error'
+}
+
+// Panel configuration - a reusable set of experts and moderator
+export interface PanelConfig {
+    id: string;
+    name: string;
+    description: string;
+    experts: ExpertAgentConfig[];
+    moderator: ModeratorConfig;
+    created?: number;
+    updated?: number;
 } 

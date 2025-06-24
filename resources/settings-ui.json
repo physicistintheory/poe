@@ -4,6 +4,56 @@
   "description": "Configure API keys and settings for the Panel of Experts plugin",
   "sections": [
     {
+      "id": "openai-api",
+      "title": "OpenAI API",
+      "description": "Configure your OpenAI API key for GPT models",
+      "properties": {
+        "poe.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your OpenAI API key for GPT models",
+          "scope": "application",
+          "ui": {
+            "type": "text",
+            "label": "OpenAI API Key",
+            "placeholder": "Enter your OpenAI API key here",
+            "description": "Get your API key from https://platform.openai.com/api-keys"
+          }
+        },
+        "poe.openaiBaseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "OpenAI API base URL (for custom endpoints)",
+          "scope": "application",
+          "ui": {
+            "type": "text",
+            "label": "OpenAI Base URL",
+            "placeholder": "https://api.openai.com/v1",
+            "description": "Leave as default unless using a custom endpoint"
+          }
+        }
+      }
+    },
+    {
+      "id": "anthropic-api",
+      "title": "Anthropic API",
+      "description": "Configure your Anthropic API key for Claude models",
+      "properties": {
+        "poe.anthropicApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Anthropic API key for Claude models",
+          "scope": "application",
+          "ui": {
+            "type": "text",
+            "label": "Anthropic API Key",
+            "placeholder": "Enter your Anthropic API key here",
+            "description": "Get your API key from https://console.anthropic.com/"
+          }
+        }
+      }
+    },
+    {
       "id": "gemini-api",
       "title": "Gemini API",
       "description": "Configure your Google Gemini API key for AI services",
@@ -18,6 +68,86 @@
             "label": "Gemini API Key",
             "placeholder": "Enter your Gemini API key here",
             "description": "Get your API key from https://makersuite.google.com/app/apikey"
+          }
+        }
+      }
+    },
+    {
+      "id": "ollama-local",
+      "title": "Ollama Local Models",
+      "description": "Configure settings for locally running Ollama models",
+      "properties": {
+        "poe.ollamaBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama server base URL",
+          "scope": "application",
+          "ui": {
+            "type": "text",
+            "label": "Ollama Base URL",
+            "placeholder": "http://localhost:11434",
+            "description": "URL where your Ollama server is running"
+          }
+        },
+        "poe.ollamaTimeout": {
+          "type": "number",
+          "default": 30000,
+          "description": "Timeout for Ollama requests in milliseconds",
+          "scope": "application",
+          "ui": {
+            "type": "number",
+            "label": "Request Timeout (ms)",
+            "placeholder": "30000",
+            "description": "Timeout for Ollama API requests"
+          }
+        }
+      }
+    },
+    {
+      "id": "general-settings",
+      "title": "General Settings",
+      "description": "General configuration options for the Panel of Experts",
+      "properties": {
+        "poe.defaultProvider": {
+          "type": "string",
+          "default": "openai",
+          "description": "Default AI provider to use",
+          "scope": "application",
+          "enum": ["openai", "anthropic", "gemini", "ollama"],
+          "enumDescriptions": [
+            "OpenAI GPT models",
+            "Anthropic Claude models", 
+            "Google Gemini models",
+            "Local Ollama models"
+          ],
+          "ui": {
+            "type": "select",
+            "label": "Default Provider",
+            "description": "Choose the default AI provider for new conversations"
+          }
+        },
+        "poe.maxTokens": {
+          "type": "number",
+          "default": 4000,
+          "description": "Maximum tokens for AI responses",
+          "scope": "application",
+          "ui": {
+            "type": "number",
+            "label": "Max Tokens",
+            "placeholder": "4000",
+            "description": "Maximum number of tokens in AI responses"
+          }
+        },
+        "poe.temperature": {
+          "type": "number",
+          "default": 0.7,
+          "description": "Temperature setting for AI responses (0.0-2.0)",
+          "scope": "application",
+          "ui": {
+            "type": "number",
+            "label": "Temperature",
+            "placeholder": "0.7",
+            "description": "Controls randomness in responses (0.0 = deterministic, 2.0 = very random)"
           }
         }
       }

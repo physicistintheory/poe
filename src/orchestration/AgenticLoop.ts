@@ -157,7 +157,7 @@ export class AgenticLoop {
         const message = await expert.generateMessage(
             this.session.messages,
             true, // Stream response
-            (chunk: string) => {
+            (_chunk: string) => {
                 // Handle streaming updates
                 this.notifyMessageUpdate();
             }
@@ -198,7 +198,6 @@ export class AgenticLoop {
 
     private analyzeExpertInteractions(): void {
         // Analyze how experts are responding to each other
-        const recentMessages = this.session.messages.slice(-this.experts.length * 2);
         // Implementation would analyze message patterns, references, etc.
         outputChannel.appendLine('AgenticLoop: Expert interactions analyzed');
     }

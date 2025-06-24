@@ -5,7 +5,7 @@ import { ProviderType, LLMResponse } from '../types';
 export class AnthropicProvider extends BaseProvider {
     private client: Anthropic;
 
-    constructor(apiKey: string, defaultModel: string = 'claude-3-sonnet-20240229') {
+    constructor(apiKey: string, defaultModel: string = '') {
         super(apiKey, defaultModel);
         this.client = new Anthropic({
             apiKey: this.apiKey
@@ -17,14 +17,36 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     async getAvailableModels(): Promise<string[]> {
-        // Anthropic doesn't provide a models list API, so we hardcode the known models
-        return [
-            'claude-3-opus-20240229',
-            'claude-3-sonnet-20240229',
-            'claude-3-haiku-20240307',
-            'claude-3-5-sonnet-20240620',
-            'claude-3-7-sonnet-20250219'
-        ];
+        try {
+            // Anthropic now provides a models list API
+            const response = await fetch('https://api.anthropic.com/v1/models', {
+                method: 'GET',
+                headers: {
+                    'x-api-key': this.apiKey,
+                    'anthropic-version': '2023-06-01'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Anthropic API error: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return data.data
+                .map((model: { id: string }) => model.id)
+                .sort();
+        } catch (error) {
+            console.error('Error fetching Anthropic models:', error);
+            // Fallback to known models if API call fails
+            return [
+                'claude-3-opus-20240229',
+                'claude-3-sonnet-20240229',
+                'claude-3-haiku-20240307',
+                'claude-3-5-sonnet-20240620',
+                'claude-3-5-sonnet-20241022',
+                'claude-3-5-haiku-20241022'
+            ];
+        }
     }
 
     async generateCompletion(

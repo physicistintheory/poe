@@ -5,7 +5,7 @@ import { ProviderType, LLMResponse } from '../types';
 export class OpenAIProvider extends BaseProvider {
     private client: OpenAI;
 
-    constructor(apiKey: string, defaultModel: string = 'gpt-4') {
+    constructor(apiKey: string, defaultModel: string = '') {
         super(apiKey, defaultModel);
         this.client = new OpenAI({
             apiKey: this.apiKey
@@ -25,7 +25,7 @@ export class OpenAIProvider extends BaseProvider {
                 .map(model => model.id);
         } catch (error) {
             console.error('Error fetching OpenAI models:', error);
-            return ['gpt-4', 'gpt-3.5-turbo']; // Fallback to default models
+            return []; // No fallback - return empty array if API call fails
         }
     }
 

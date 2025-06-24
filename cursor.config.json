@@ -37,17 +37,17 @@
         "configuration": {
             "title": "Panel of Experts",
             "properties": {
-                "poe.apiKeys.openai": {
+                "poe.openaiApiKey": {
                     "type": "string",
                     "description": "OpenAI API Key",
                     "default": ""
                 },
-                "poe.apiKeys.anthropic": {
+                "poe.anthropicApiKey": {
                     "type": "string",
                     "description": "Anthropic API Key",
                     "default": ""
                 },
-                "poe.apiKeys.google": {
+                "poe.geminiApiKey": {
                     "type": "string",
                     "description": "Google AI API Key",
                     "default": ""
@@ -92,7 +92,7 @@
                     "type": "number",
                     "description": "Maximum number of auto-discussion turns",
                     "default": 50
-                },
+                }
             }
         },
         "views": {

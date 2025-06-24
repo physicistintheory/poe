@@ -10,7 +10,7 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
         id: 'expert-1',
         name: 'Backend Engineer',
         provider: ProviderType.OLLAMA,
-        model: 'llama3.2:1b',
+        model: '', // Will be set dynamically based on available models
         persona: `You are a veteran software engineer with extensive backend experience. 
     You focus on architectural decisions, code quality, and performance optimizations.
     You value reliable, scalable, and maintainable solutions over quick hacks.`,
@@ -21,7 +21,7 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
         id: 'expert-2',
         name: 'Creative Brainstormer',
         provider: ProviderType.OLLAMA,
-        model: 'llama3.2:1b',
+        model: '', // Will be set dynamically based on available models
         persona: `You are an innovative thinker who excels at generating creative solutions.
     You think outside the box and challenge assumptions.
     You're skilled at finding unconventional approaches to problems.`,
@@ -32,7 +32,7 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
         id: 'expert-3',
         name: 'Code Optimizer',
         provider: ProviderType.OLLAMA,
-        model: 'llama3.2:1b',
+        model: '', // Will be set dynamically based on available models
         persona: `You are an efficiency-focused developer who specializes in optimizing code.
     You can spot inefficient patterns and suggest improvements.
     You balance readability with performance considerations.`,
@@ -46,7 +46,7 @@ const DEFAULT_MODERATOR: ModeratorConfig = {
     id: 'moderator',
     name: 'Moderator',
     provider: ProviderType.OLLAMA,
-    model: 'llama3.2:1b',
+    model: '', // Will be set dynamically based on available models
     systemPrompt: `As a discussion moderator, your job is to guide the conversation toward productive outcomes.
   Keep the experts focused on the user's question and prevent tangents.
   Summarize key points and ask clarifying questions when needed.`,
@@ -58,23 +58,23 @@ const DEFAULT_CONFIG: PluginConfig = {
     providers: {
         [ProviderType.OPENAI]: {
             type: ProviderType.OPENAI,
-            defaultModel: 'gpt-4',
-            models: ['gpt-4', 'gpt-3.5-turbo']
+            defaultModel: '', // Will be populated dynamically
+            models: [] // Will be populated dynamically
         },
         [ProviderType.ANTHROPIC]: {
             type: ProviderType.ANTHROPIC,
-            defaultModel: 'claude-2',
-            models: ['claude-2', 'claude-instant-1']
+            defaultModel: '', // Will be populated dynamically
+            models: [] // Will be populated dynamically
         },
         [ProviderType.GOOGLE]: {
             type: ProviderType.GOOGLE,
-            defaultModel: 'gemini-1.5-pro',
-            models: ['gemini-1.5-pro', 'gemini-1.0-pro']
+            defaultModel: '', // Will be populated dynamically
+            models: [] // Will be populated dynamically
         },
         [ProviderType.OLLAMA]: {
             type: ProviderType.OLLAMA,
-            defaultModel: 'llama2:3b',
-            models: ['llama2:3b', 'llama2:7b', 'mistral:7b', 'llama3.2:1b']
+            defaultModel: '', // Will be populated dynamically
+            models: [] // Will be populated dynamically
         }
     },
     defaultExperts: DEFAULT_EXPERTS,
@@ -114,9 +114,9 @@ export class PoePlugin {
      */
     private loadApiKeysFromSettings(): void {
         try {
-            // Get API keys from Cursor settings
-            const openaiKey = vscode.workspace.getConfiguration('poe.apiKeys').get('openai') as string;
-            const anthropicKey = vscode.workspace.getConfiguration('poe.apiKeys').get('anthropic') as string;
+            // Get API keys from Cursor settings (using the keys defined in package.json)
+            const openaiKey = vscode.workspace.getConfiguration('poe').get('openaiApiKey') as string;
+            const anthropicKey = vscode.workspace.getConfiguration('poe').get('anthropicApiKey') as string;
             const googleKey = vscode.workspace.getConfiguration('poe').get('geminiApiKey') as string;
 
             // Update provider configs with API keys, only if provider exists
@@ -151,6 +151,9 @@ export class PoePlugin {
 
         console.log('Initializing provider manager...');
 
+        // Populate models dynamically and set default models for experts and moderator
+        await this.populateModelsAndSetDefaults();
+
         // Create conversation orchestrator with default experts and moderator
         try {
             console.log('Creating initial conversation...');
@@ -161,6 +164,68 @@ export class PoePlugin {
             console.log('Initial conversation created successfully');
         } catch (error) {
             console.error('Error creating initial conversation:', error);
+        }
+    }
+
+    /**
+     * Populate models dynamically and set default models for experts and moderator
+     */
+    private async populateModelsAndSetDefaults(): Promise<void> {
+        try {
+            // Get available models from each provider
+            const providers = this.providerManager.getProviders();
+            
+            for (const [providerType, provider] of providers) {
+                try {
+                    const models = await provider.getAvailableModels();
+                    if (models.length > 0) {
+                        // Update the config with available models
+                        const providerConfig = this.config.providers[providerType as ProviderType];
+                        if (providerConfig) {
+                            providerConfig.models = models;
+                        }
+                        
+                        // Set default model for this provider if not already set
+                        if (providerConfig && !providerConfig.defaultModel) {
+                            providerConfig.defaultModel = models[0];
+                        }
+                        
+                        console.log(`Successfully loaded ${models.length} models for ${providerType}: ${models.join(', ')}`);
+                    } else {
+                        console.warn(`No models available for provider ${providerType}`);
+                    }
+                } catch (error) {
+                    console.warn(`Failed to fetch models for provider ${providerType}:`, error);
+                }
+            }
+
+            // Set default models for experts and moderator if they don't have models set
+            this.config.defaultExperts = this.config.defaultExperts.map(expert => {
+                if (!expert.model) {
+                    const providerConfig = this.config.providers[expert.provider];
+                    if (providerConfig && providerConfig.defaultModel) {
+                        console.log(`Set default model for expert ${expert.name}: ${providerConfig.defaultModel}`);
+                        return { ...expert, model: providerConfig.defaultModel };
+                    } else {
+                        console.warn(`No default model available for expert ${expert.name} (provider: ${expert.provider})`);
+                    }
+                }
+                return expert;
+            });
+
+            if (!this.config.defaultModerator.model) {
+                const providerConfig = this.config.providers[this.config.defaultModerator.provider];
+                if (providerConfig && providerConfig.defaultModel) {
+                    console.log(`Set default model for moderator: ${providerConfig.defaultModel}`);
+                    this.config.defaultModerator = { ...this.config.defaultModerator, model: providerConfig.defaultModel };
+                } else {
+                    console.warn(`No default model available for moderator (provider: ${this.config.defaultModerator.provider})`);
+                }
+            }
+
+            console.log('Models populated and defaults set successfully');
+        } catch (error) {
+            console.error('Error populating models and setting defaults:', error);
         }
     }
 
@@ -306,7 +371,7 @@ export function activate(context: vscode.ExtensionContext): void {
     
     // Create and register the panel view provider
     outputChannel.appendLine('Creating and registering panel view provider...');
-    panelViewProvider = new PanelViewProvider(context.extensionUri);
+    panelViewProvider = new PanelViewProvider(context.extensionUri, context);
     
     const panelView = vscode.window.registerWebviewViewProvider(
         'poe-panel',

@@ -6,7 +6,7 @@ import { ProviderType, LLMResponse } from '../types';
 export class GoogleProvider extends BaseProvider {
     private client: GenerativeServiceClient;
 
-    constructor(apiKey: string, defaultModel: string = 'gemini-1.5-pro') {
+    constructor(apiKey: string, defaultModel: string = '') {
         super(apiKey, defaultModel);
         // Create auth client
         const auth = new GoogleAuth({
