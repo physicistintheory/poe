@@ -175,7 +175,7 @@ export class ConversationOrchestrator {
      */
     private async getAllExpertResponses(): Promise<void> {
         // Call each expert incrementally so they can respond to each other
-        for(let expert of this.experts) {
+        for(const expert of this.experts) {
             await this.getExpertResponse(expert);
         }
     }
