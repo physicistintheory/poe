@@ -20,7 +20,7 @@ export class OllamaProvider extends BaseProvider {
         try {
             const response = await fetch(`${this.baseUrl}/tags`);
             const data = await response.json();
-            return data.models.map((model: any) => model.name);
+            return data.models.map((model: { name: string }) => model.name);
         } catch (error) {
             console.error('Error fetching Ollama models:', error);
             return ['llama2:3b']; // Fallback to default model
@@ -34,7 +34,7 @@ export class OllamaProvider extends BaseProvider {
         maxTokens: number = 2000
     ): Promise<LLMResponse> {
         const formattedMessages = this.formatMessages(messages);
-        const prompt = formattedMessages.map((msg: any) => `${msg.role}: ${msg.content}`).join('\n');
+        const prompt = formattedMessages.map((msg) => `${msg.role}: ${msg.content}`).join('\n');
 
         try {
             const response = await fetch(`${this.baseUrl}/generate`, {
@@ -69,7 +69,7 @@ export class OllamaProvider extends BaseProvider {
         maxTokens: number = 2000
     ): Promise<void> {
         const formattedMessages = this.formatMessages(messages);
-        const prompt = formattedMessages.map((msg: any) => `${msg.role}: ${msg.content}`).join('\n');
+        const prompt = formattedMessages.map((msg) => `${msg.role}: ${msg.content}`).join('\n');
 
         try {
             const response = await fetch(`${this.baseUrl}/generate`, {
@@ -129,7 +129,7 @@ export class OllamaProvider extends BaseProvider {
         }
     }
 
-    formatMessages(messages: { role: string; content: string }[]): any[] {
+    formatMessages(messages: { role: string; content: string }[]): { role: 'user' | 'assistant'; content: string }[] {
         // Convert our internal format to Ollama's format
         return messages.map(msg => ({
             role: msg.role === 'assistant' ? 'assistant' : 'user',

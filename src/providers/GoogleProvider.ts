@@ -121,7 +121,7 @@ export class GoogleProvider extends BaseProvider {
         }
     }
 
-    formatMessages(messages: { role: string; content: string }[]): any {
+    formatMessages(messages: { role: string; content: string }[]): { role: 'user' | 'model'; parts: { text: string }[] }[] {
         // Google's format is different from the common role/content format
         return messages.map(message => {
             const role = message.role === 'user' ? 'user' : 'model';

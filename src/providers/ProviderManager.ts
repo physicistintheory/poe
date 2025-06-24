@@ -10,9 +10,9 @@ import { OllamaProvider } from './OllamaProvider';
  */
 export class ProviderManager {
     private providers: Map<string, BaseProvider> = new Map();
-    private configs: Record<ProviderType, ProviderConfig>;
+    private configs: Partial<Record<ProviderType, ProviderConfig>>;
 
-    constructor(configs: Record<ProviderType, ProviderConfig>) {
+    constructor(configs: Partial<Record<ProviderType, ProviderConfig>>) {
         this.configs = configs;
     }
 
@@ -20,46 +20,48 @@ export class ProviderManager {
      * Initialize all providers with their configurations
      */
     async initialize(): Promise<void> {
-        // Initialize OpenAI provider if API key is available
+        // Initialize OpenAI provider if API key is available and config exists
         if (this.configs[ProviderType.OPENAI]?.apiKey) {
             this.providers.set(
                 ProviderType.OPENAI,
                 new OpenAIProvider(
-                    this.configs[ProviderType.OPENAI].apiKey!,
-                    this.configs[ProviderType.OPENAI].defaultModel
+                    this.configs[ProviderType.OPENAI]!.apiKey!,
+                    this.configs[ProviderType.OPENAI]!.defaultModel
                 )
             );
-        } 
+        }
 
-        // Initialize Anthropic provider if API key is available
+        // Initialize Anthropic provider if API key is available and config exists
         if (this.configs[ProviderType.ANTHROPIC]?.apiKey) {
             this.providers.set(
                 ProviderType.ANTHROPIC,
                 new AnthropicProvider(
-                    this.configs[ProviderType.ANTHROPIC].apiKey!,
-                    this.configs[ProviderType.ANTHROPIC].defaultModel
+                    this.configs[ProviderType.ANTHROPIC]!.apiKey!,
+                    this.configs[ProviderType.ANTHROPIC]!.defaultModel
                 )
             );
-        } 
+        }
 
-        // Initialize Google provider if API key is available
+        // Initialize Google provider if API key is available and config exists
         if (this.configs[ProviderType.GOOGLE]?.apiKey) {
             this.providers.set(
                 ProviderType.GOOGLE,
                 new GoogleProvider(
-                    this.configs[ProviderType.GOOGLE].apiKey!,
-                    this.configs[ProviderType.GOOGLE].defaultModel
+                    this.configs[ProviderType.GOOGLE]!.apiKey!,
+                    this.configs[ProviderType.GOOGLE]!.defaultModel
                 )
             );
-        } 
-        // Initialize Ollama provider (no API key needed)
-        this.providers.set(
-            ProviderType.OLLAMA,
-            new OllamaProvider(
-                '',  // No API key needed for local Ollama
-                this.configs[ProviderType.OLLAMA]?.defaultModel || 'llama2:3b'
-            )
-        );
+        }
+        // Initialize Ollama provider if config exists
+        if (this.configs[ProviderType.OLLAMA]) {
+            this.providers.set(
+                ProviderType.OLLAMA,
+                new OllamaProvider(
+                    '',  // No API key needed for local Ollama
+                    this.configs[ProviderType.OLLAMA]!.defaultModel || 'llama2:3b'
+                )
+            );
+        }
     }
 
     /**
@@ -80,46 +82,62 @@ export class ProviderManager {
      * Update a provider configuration
      */
     async updateProviderConfig(type: ProviderType, config: Partial<ProviderConfig>): Promise<void> {
-        // Update the config
+        // Only update if the base config exists
+        if (!this.configs[type]) return;
         this.configs[type] = {
             ...this.configs[type],
             ...config
         };
 
-        // If the API key changed, reinitialize the provider
+        // If the API key or defaultModel changed, reinitialize the provider
         if (config.apiKey || config.defaultModel) {
             // Remove existing provider
             this.providers.delete(type);
 
-            // Create new provider with updated config
-            if (config.apiKey) {
+            // Create new provider with updated config if config exists
+            if (this.configs[type]) {
                 switch (type) {
                     case ProviderType.OPENAI:
-                        this.providers.set(
-                            type,
-                            new OpenAIProvider(
-                                this.configs[type].apiKey!,
-                                this.configs[type].defaultModel
-                            )
-                        );
+                        if (this.configs[type]?.apiKey) {
+                            this.providers.set(
+                                type,
+                                new OpenAIProvider(
+                                    this.configs[type]!.apiKey!,
+                                    this.configs[type]!.defaultModel
+                                )
+                            );
+                        }
                         break;
 
                     case ProviderType.ANTHROPIC:
-                        this.providers.set(
-                            type,
-                            new AnthropicProvider(
-                                this.configs[type].apiKey!,
-                                this.configs[type].defaultModel
-                            )
-                        );
+                        if (this.configs[type]?.apiKey) {
+                            this.providers.set(
+                                type,
+                                new AnthropicProvider(
+                                    this.configs[type]!.apiKey!,
+                                    this.configs[type]!.defaultModel
+                                )
+                            );
+                        }
                         break;
 
                     case ProviderType.GOOGLE:
+                        if (this.configs[type]?.apiKey) {
+                            this.providers.set(
+                                type,
+                                new GoogleProvider(
+                                    this.configs[type]!.apiKey!,
+                                    this.configs[type]!.defaultModel
+                                )
+                            );
+                        }
+                        break;
+                    case ProviderType.OLLAMA:
                         this.providers.set(
                             type,
-                            new GoogleProvider(
-                                this.configs[type].apiKey!,
-                                this.configs[type].defaultModel
+                            new OllamaProvider(
+                                '',
+                                this.configs[type]!.defaultModel || 'llama2:3b'
                             )
                         );
                         break;
@@ -138,7 +156,7 @@ export class ProviderManager {
     /**
      * Validate API keys for all providers
      */
-    async validateApiKeys(): Promise<Record<ProviderType, boolean>> {
+    async validateApiKeys(): Promise<Partial<Record<ProviderType, boolean>>> {
         const results: Partial<Record<ProviderType, boolean>> = {};
 
         // Check each provider
@@ -151,7 +169,7 @@ export class ProviderManager {
             }
         }
 
-        return results as Record<ProviderType, boolean>;
+        return results;
     }
 
     /**
