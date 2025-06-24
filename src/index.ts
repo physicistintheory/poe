@@ -1,4 +1,4 @@
-import { ProviderType, PluginConfig, ExpertAgentConfig, ModeratorConfig, ConversationSession } from './types';
+import { ProviderType, PluginConfig, ExpertAgentConfig, ModeratorConfig, ConversationSession, PanelConfig } from './types';
 import { ProviderManager } from './providers/ProviderManager';
 import { ConversationOrchestrator, setConversationOutputChannel } from './orchestration/ConversationOrchestrator';
 import * as vscode from 'vscode';
@@ -66,10 +66,11 @@ const DEFAULT_CONFIG: PluginConfig = {
             defaultModel: '', // Will be populated dynamically
             models: [] // Will be populated dynamically
         },
-        [ProviderType.GOOGLE]: {
-            type: ProviderType.GOOGLE,
-            defaultModel: '', // Will be populated dynamically
-            models: [] // Will be populated dynamically
+        [ProviderType.GEMINI]: {
+            type: ProviderType.GEMINI,
+            apiKey: '',
+            defaultModel: 'gemini-1.5-pro',
+            models: []
         },
         [ProviderType.OLLAMA]: {
             type: ProviderType.OLLAMA,
@@ -128,8 +129,8 @@ export class PoePlugin {
                 this.config.providers[ProviderType.ANTHROPIC]!.apiKey = anthropicKey;
             }
             
-            if (googleKey && this.config.providers[ProviderType.GOOGLE]) {
-                this.config.providers[ProviderType.GOOGLE]!.apiKey = googleKey;
+            if (googleKey && this.config.providers[ProviderType.GEMINI]) {
+                this.config.providers[ProviderType.GEMINI]!.apiKey = googleKey;
             }
 
             console.log('Loaded API keys from settings:', {
@@ -154,17 +155,23 @@ export class PoePlugin {
         // Populate models dynamically and set default models for experts and moderator
         await this.populateModelsAndSetDefaults();
 
-        // Create conversation orchestrator with default experts and moderator
-        try {
-            console.log('Creating initial conversation...');
-            this.createNewConversation({
-                title: 'New Discussion',
-                goal: ''
-            });
-            console.log('Initial conversation created successfully');
-        } catch (error) {
-            console.error('Error creating initial conversation:', error);
+        // Don't create an initial conversation - let the user start one with their selected panel
+        // This prevents hardcoded defaults from being used before panel selection
+        if (outputChannel) {
+            outputChannel.appendLine('Plugin initialized - no initial conversation created');
         }
+        
+        // Create conversation orchestrator with default experts and moderator
+        // try {
+        //     console.log('Creating initial conversation...');
+        //     this.createNewConversation({
+        //         title: 'New Discussion',
+        //         goal: ''
+        //     });
+        //     console.log('Initial conversation created successfully');
+        // } catch (error) {
+        //     console.error('Error creating initial conversation:', error);
+        // }
     }
 
     /**
@@ -243,6 +250,13 @@ export class PoePlugin {
         const experts = settings.experts || this.config.defaultExperts;
         const moderator = settings.moderator || this.config.defaultModerator;
 
+        if (outputChannel) {
+            outputChannel.appendLine(`createNewConversation - settings.experts provided: ${settings.experts ? 'YES' : 'NO'}`);
+            outputChannel.appendLine(`createNewConversation - settings.moderator provided: ${settings.moderator ? 'YES' : 'NO'}`);
+            outputChannel.appendLine(`createNewConversation - final experts: ${experts.map(e => e.name).join(', ')}`);
+            outputChannel.appendLine(`createNewConversation - final moderator: ${moderator.name}`);
+        }
+
         try {
             const providers = this.providerManager.getProviders();
             console.log(`Got ${providers.size} providers for conversation`);
@@ -305,15 +319,36 @@ export class PoePlugin {
     /**
      * Start a new panel discussion
      */
-    startPanelDiscussion(): void {
+    startPanelDiscussion(panelConfig?: PanelConfig): void {
         vscode.window.showInformationMessage('Starting Panel of Experts Discussion');
+        
+        if (outputChannel) {
+            outputChannel.appendLine(`startPanelDiscussion called with panel: ${panelConfig ? panelConfig.name : 'undefined'}`);
+            if (panelConfig) {
+                outputChannel.appendLine(`Panel experts: ${panelConfig.experts.map(e => e.name).join(', ')}`);
+                outputChannel.appendLine(`Panel moderator: ${panelConfig.moderator.name}`);
+            } else {
+                outputChannel.appendLine('No panel config provided, will use defaults');
+            }
+        }
         
         // Create a new conversation with a more descriptive title
         const sessionTitle = `Discussion ${new Date().toLocaleDateString()} - ${new Date().toLocaleTimeString()}`;
         
+        // Use panel config if provided, otherwise fall back to defaults
+        const experts = panelConfig?.experts || this.config.defaultExperts;
+        const moderator = panelConfig?.moderator || this.config.defaultModerator;
+        
+        if (outputChannel) {
+            outputChannel.appendLine(`Using experts: ${experts.map(e => e.name).join(', ')}`);
+            outputChannel.appendLine(`Using moderator: ${moderator.name}`);
+        }
+        
         this.createNewConversation({
             title: sessionTitle,
-            goal: 'New discussion started via command'
+            goal: panelConfig?.description || 'New discussion started via command',
+            experts: experts,
+            moderator: moderator
         });
     }
 
@@ -334,13 +369,19 @@ export class PoePlugin {
     /**
      * Reset the current conversation
      */
-    resetConversation(): void {
+    resetConversation(panelConfig?: PanelConfig): void {
         // Create a new conversation with a unique title
         const resetTitle = `Reset Discussion ${new Date().toLocaleDateString()} - ${new Date().toLocaleTimeString()}`;
         
+        // Use panel config if provided, otherwise fall back to defaults
+        const experts = panelConfig?.experts || this.config.defaultExperts;
+        const moderator = panelConfig?.moderator || this.config.defaultModerator;
+        
         this.createNewConversation({
             title: resetTitle,
-            goal: 'Fresh discussion after reset'
+            goal: panelConfig?.description || 'Fresh discussion after reset',
+            experts: experts,
+            moderator: moderator
         });
         
         vscode.window.showInformationMessage('Conversation has been reset');
@@ -421,11 +462,15 @@ export function activate(context: vscode.ExtensionContext): void {
     // Register commands
     context.subscriptions.push(
         vscode.commands.registerCommand('poe.startPanel', () => {
-            if (pluginInstance) {
-                pluginInstance.startPanelDiscussion();
+            if (pluginInstance && panelViewProvider) {
+                // Get the currently selected panel from the panel view provider
+                const currentPanel = panelViewProvider.getCurrentPanel();
+                outputChannel.appendLine(`Starting panel discussion with panel: ${currentPanel?.name || 'default'}`);
+                
+                pluginInstance.startPanelDiscussion(currentPanel);
                 
                 // Update the panel view provider with the new orchestrator
-                if (pluginInstance.getOrchestrator() && panelViewProvider) {
+                if (pluginInstance.getOrchestrator()) {
                     outputChannel.appendLine('Updating panel view provider with new orchestrator after startPanel command');
                     panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
                 }
@@ -443,11 +488,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('poe.resetConversation', () => {
-            if (pluginInstance) {
-                pluginInstance.resetConversation();
+            if (pluginInstance && panelViewProvider) {
+                // Get the currently selected panel from the panel view provider
+                const currentPanel = panelViewProvider.getCurrentPanel();
+                outputChannel.appendLine(`Resetting conversation with panel: ${currentPanel?.name || 'default'}`);
+                
+                pluginInstance.resetConversation(currentPanel);
                 
                 // Update the panel view provider with the new orchestrator
-                if (pluginInstance.getOrchestrator() && panelViewProvider) {
+                if (pluginInstance.getOrchestrator()) {
                     outputChannel.appendLine('Updating panel view provider with new orchestrator after resetConversation command');
                     panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
                 }

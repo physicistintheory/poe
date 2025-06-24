@@ -40,15 +40,63 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
 
     private loadPanelsFromStorage(): void {
         try {
-            const stored = this._context?.globalState.get('poe.panels', '[]');
-            this._panels = JSON.parse(stored);
+            if (!this._context) {
+                if (outputChannel) {
+                    outputChannel.appendLine('ERROR: No context available for loading panels');
+                }
+                this._initializeDefaultPanels();
+                return;
+            }
+            
+            const stored = this._context?.globalState.get('poe.panels', []);
+            if (outputChannel) {
+                outputChannel.appendLine(`Loading panels from storage - Context available: ${!!this._context}`);
+                outputChannel.appendLine(`Raw stored data type: ${typeof stored}, Array: ${Array.isArray(stored)}`);
+                outputChannel.appendLine(`Stored panel count: ${Array.isArray(stored) ? stored.length : 'NOT_ARRAY'}`);
+            }
+            
+            // VS Code globalState handles JSON deserialization automatically
+            this._panels = Array.isArray(stored) ? stored as PanelConfig[] : [];
+            
+            if (outputChannel) {
+                outputChannel.appendLine(`Loaded ${this._panels.length} panels from storage: ${this._panels.map(p => p.name).join(', ')}`);
+            }
             
             // If no panels are stored, initialize with defaults
             if (this._panels.length === 0) {
                 this._initializeDefaultPanels();
+                if (outputChannel) {
+                    outputChannel.appendLine('No panels in storage, initialized with defaults');
+                }
             }
             
-            this._currentPanel = this._panels[0];
+            // Restore the previously selected panel if available
+            const storedCurrentPanelId = this._context?.globalState.get('poe.currentPanelId', '');
+            if (outputChannel) {
+                outputChannel.appendLine(`Stored current panel ID: "${storedCurrentPanelId}"`);
+            }
+            
+            if (storedCurrentPanelId) {
+                const storedPanel = this._panels.find(p => p.id === storedCurrentPanelId);
+                if (storedPanel) {
+                    this._currentPanel = storedPanel;
+                    if (outputChannel) {
+                        outputChannel.appendLine(`Restored current panel: ${storedPanel.name} (${storedCurrentPanelId})`);
+                    }
+                } else {
+                    // If the stored panel ID doesn't exist anymore, default to first panel
+                    this._currentPanel = this._panels[0];
+                    if (outputChannel) {
+                        outputChannel.appendLine(`Stored panel ID ${storedCurrentPanelId} not found, defaulted to first panel: ${this._panels[0]?.name}`);
+                    }
+                }
+            } else {
+                // No stored selection, default to first panel
+                this._currentPanel = this._panels[0];
+                if (outputChannel) {
+                    outputChannel.appendLine(`No stored panel selection, defaulted to first panel: ${this._panels[0]?.name}`);
+                }
+            }
             
             // Populate models for panels that don't have them set (async, don't await)
             this.populatePanelModels().catch(error => {
@@ -56,6 +104,9 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             });
         } catch (error) {
             console.error('Error loading panels from storage:', error);
+            if (outputChannel) {
+                outputChannel.appendLine(`ERROR loading panels from storage: ${error}`);
+            }
             this._initializeDefaultPanels();
         }
     }
@@ -113,8 +164,34 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     }
 
     private savePanelsToStorage(): void {
-        this._context.globalState.update('poe.panels', this._panels);
-        if (outputChannel) outputChannel.appendLine('Saved panels to globalState');
+        try {
+            if (!this._context) {
+                if (outputChannel) {
+                    outputChannel.appendLine('ERROR: No context available for saving panels');
+                }
+                return;
+            }
+            
+            if (outputChannel) {
+                outputChannel.appendLine(`Saving panels to storage - Context available: ${!!this._context}`);
+                outputChannel.appendLine(`Panel count being saved: ${this._panels.length}`);
+                outputChannel.appendLine(`Panel names being saved: ${this._panels.map(p => p.name).join(', ')}`);
+            }
+            
+            // VS Code globalState handles JSON serialization automatically
+            this._context.globalState.update('poe.panels', this._panels);
+            
+            if (outputChannel) {
+                // Verify the save by immediately reading it back
+                const verification = this._context.globalState.get('poe.panels', []);
+                outputChannel.appendLine(`Verification read after save: ${Array.isArray(verification) ? verification.length : 'NOT_ARRAY'} panels`);
+                outputChannel.appendLine(`Saved ${this._panels.length} panels to globalState: ${this._panels.map(p => p.name).join(', ')}`);
+            }
+        } catch (error) {
+            if (outputChannel) {
+                outputChannel.appendLine(`ERROR saving panels to storage: ${error}`);
+            }
+        }
     }
 
     /**
@@ -211,6 +288,25 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         const panel = this._panels.find(p => p.id === panelId);
         if (panel) {
             this._currentPanel = panel;
+            // Save the current panel selection to storage
+            this._context.globalState.update('poe.currentPanelId', panelId);
+            if (outputChannel) {
+                outputChannel.appendLine(`Set current panel to: ${panel.name} (${panelId})`);
+            }
+            
+            // Create a new conversation with the selected panel's configuration
+            // This ensures the orchestrator uses the correct experts and moderator
+            vscode.commands.executeCommand('poe.startPanel')
+                .then(() => {
+                    if (outputChannel) {
+                        outputChannel.appendLine(`Created new conversation for panel: ${panel.name}`);
+                    }
+                }, (error: Error) => {
+                    if (outputChannel) {
+                        outputChannel.appendLine(`Error creating conversation for panel ${panel.name}: ${error.message}`);
+                    }
+                });
+            
             this._updateView();
         }
     }
@@ -411,6 +507,10 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
      * Handle panel switching
      */
     private _handlePanelSwitch(panelId: string): void {
+        if (outputChannel) {
+            outputChannel.appendLine(`_handlePanelSwitch called with panelId: ${panelId}`);
+        }
+        
         if (panelId === 'create-new') {
             this._handleCreatePanel();
         } else {

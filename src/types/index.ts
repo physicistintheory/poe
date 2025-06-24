@@ -2,7 +2,7 @@
 export enum ProviderType {
     OPENAI = 'openai',
     ANTHROPIC = 'anthropic',
-    GOOGLE = 'google',
+    GEMINI = 'gemini',
     OLLAMA = 'ollama'
 }
 

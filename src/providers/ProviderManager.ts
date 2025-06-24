@@ -42,13 +42,13 @@ export class ProviderManager {
             );
         }
 
-        // Initialize Google provider if API key is available and config exists
-        if (this.configs[ProviderType.GOOGLE]?.apiKey) {
+        // Initialize Google/Gemini provider if API key is available
+        if (this.configs[ProviderType.GEMINI]?.apiKey) {
             this.providers.set(
-                ProviderType.GOOGLE,
+                ProviderType.GEMINI,
                 new GoogleProvider(
-                    this.configs[ProviderType.GOOGLE]!.apiKey!,
-                    this.configs[ProviderType.GOOGLE]!.defaultModel
+                    this.configs[ProviderType.GEMINI]!.apiKey!,
+                    this.configs[ProviderType.GEMINI]!.defaultModel
                 )
             );
         }
@@ -121,7 +121,7 @@ export class ProviderManager {
                         }
                         break;
 
-                    case ProviderType.GOOGLE:
+                    case ProviderType.GEMINI:
                         if (this.configs[type]?.apiKey) {
                             this.providers.set(
                                 type,

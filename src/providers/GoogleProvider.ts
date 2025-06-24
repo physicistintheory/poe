@@ -17,7 +17,7 @@ export class GoogleProvider extends BaseProvider {
     }
 
     getProviderType(): ProviderType {
-        return ProviderType.GOOGLE;
+        return ProviderType.GEMINI;
     }
 
     async getAvailableModels(): Promise<string[]> {
