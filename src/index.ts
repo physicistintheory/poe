@@ -117,7 +117,7 @@ export class PoePlugin {
             // Get API keys from Cursor settings
             const openaiKey = vscode.workspace.getConfiguration('poe.apiKeys').get('openai') as string;
             const anthropicKey = vscode.workspace.getConfiguration('poe.apiKeys').get('anthropic') as string;
-            const googleKey = vscode.workspace.getConfiguration('poe.apiKeys').get('google') as string;
+            const googleKey = vscode.workspace.getConfiguration('poe').get('geminiApiKey') as string;
 
             // Update provider configs with API keys, only if provider exists
             if (openaiKey && this.config.providers[ProviderType.OPENAI]) {

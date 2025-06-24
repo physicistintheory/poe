@@ -104,7 +104,7 @@ export abstract class BaseAgent {
             await this.provider.generateStreamingCompletion(
                 formattedMessages,
                 (chunk, done) => {
-                    messageContent += chunk;
+                    messageContent += chunk; 
                     newMessage.content = messageContent;
                     callback(chunk, done);
 

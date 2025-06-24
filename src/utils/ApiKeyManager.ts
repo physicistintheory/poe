@@ -42,7 +42,7 @@ export class ApiKeyManager {
                 case ProviderType.ANTHROPIC:
                     return this.cursor.getConfiguration('poe.apiKeys.anthropic');
                 case ProviderType.GOOGLE:
-                    return this.cursor.getConfiguration('poe.apiKeys.google');
+                    return this.cursor.getConfiguration('poe.geminiApiKey');
                 case ProviderType.OLLAMA:
                     return this.cursor.getConfiguration('poe.apiKeys.ollama');
                 default:
@@ -70,7 +70,7 @@ export class ApiKeyManager {
                     configKey = 'poe.apiKeys.anthropic';
                     break;
                 case ProviderType.GOOGLE:
-                    configKey = 'poe.apiKeys.google';
+                    configKey = 'poe.geminiApiKey';
                     break;
                 case ProviderType.OLLAMA:
                     configKey = 'poe.apiKeys.ollama';

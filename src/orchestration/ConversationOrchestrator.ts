@@ -10,10 +10,12 @@ import {
 import { ExpertAgent } from '../agents/ExpertAgent';
 import { ModeratorAgent } from '../agents/ModeratorAgent';
 import { BaseProvider } from '../providers/BaseProvider';
+import { AgenticLoop, setAgenticLoopOutputChannel } from './AgenticLoop';
 import * as vscode from 'vscode';
 let outputChannel: vscode.OutputChannel;
 export function setConversationOutputChannel(channel: vscode.OutputChannel) {
     outputChannel = channel;
+    setAgenticLoopOutputChannel(channel);
 }
 
 // Reference to the shared output channel
@@ -30,6 +32,7 @@ export class ConversationOrchestrator {
     private currentTurn: number = 0;
     private messageListeners: ((message: Message) => void)[] = [];
     private statusListeners: ((status: ConversationStatus) => void)[] = [];
+    private agenticLoop!: AgenticLoop;
 
     constructor(
         sessionConfig: Partial<ConversationSession>,
@@ -61,6 +64,9 @@ export class ConversationOrchestrator {
 
         // Initialize moderator agent
         this.initializeModerator();
+
+        // Initialize agentic loop
+        this.initializeAgenticLoop();
     }
 
     /**
@@ -93,6 +99,28 @@ export class ConversationOrchestrator {
     }
 
     /**
+     * Initialize the agentic loop
+     */
+    private initializeAgenticLoop(): void {
+        this.agenticLoop = new AgenticLoop(
+            this.session,
+            this.experts,
+            this.moderator,
+            this.maxTurns
+        );
+
+        // Wire up listeners
+        this.agenticLoop.onMessage((message: Message) => {
+            this.notifyMessageListeners(message);
+        });
+
+        this.agenticLoop.onStatusChange((status: ConversationStatus) => {
+            this.status = status;
+            this.notifyStatusListeners(status);
+        });
+    }
+
+    /**
      * Add a user message to the conversation
      */
     async addUserMessage(content: string): Promise<void> {
@@ -117,143 +145,33 @@ export class ConversationOrchestrator {
         // Notify listeners
         this.notifyMessageListeners(message);
 
-        // If auto-discuss is enabled, start the next round
+        // If auto-discuss is enabled, start the agentic loop
         outputChannel.appendLine(`KBUX message received, autodiscuss: ${this.session.autoDiscuss}`)
         if (this.session.autoDiscuss) {
-            this.startNextRound();
+            this.startAgenticLoop();
         } else {
             this.setStatus(ConversationStatus.WAITING_USER);
         }
     }
 
     /**
-     * Start a new discussion round
+     * Start the agentic loop
      */
-    async startNextRound(): Promise<void> {
-        outputChannel.appendLine(`KBUX starting next round, status ${this.status}`)
-        if (this.status === ConversationStatus.PROCESSING) {
-            return; // Already processing
-        }
-
-        if (this.currentTurn >= this.maxTurns) {
-            this.setStatus(ConversationStatus.IDLE);
-            // Add a message indicating max turns reached
-            this.addModeratorMessage("We've reached the maximum number of turns for this discussion. Let's wrap up here.");
-            return;
-        }
-
-        this.setStatus(ConversationStatus.PROCESSING);
-        this.currentTurn++;
-
-        try {
-            // Get responses from all experts
-            await this.getAllExpertResponses();
-
-            // Check if moderator should intervene
-            const shouldIntervene = await this.moderator.shouldIntervene(this.session.messages);
-
-            if (shouldIntervene) {
-                // Get moderator response
-                await this.getModeratorResponse();
-            }
-
-            // If auto-discuss is enabled and we haven't reached max turns, continue
-            if (this.session.autoDiscuss && this.currentTurn < this.maxTurns) {
-                // Small delay to avoid hammering APIs
-                setTimeout(() => this.startNextRound(), 1000);
-            } else {
-                this.setStatus(ConversationStatus.WAITING_USER);
-            }
-        } catch (error) {
-            console.error('Error during conversation round:', error);
-            this.setStatus(ConversationStatus.ERROR);
-        }
+    async startAgenticLoop(): Promise<void> {
+        outputChannel.appendLine(`KBUX starting agentic loop, status ${this.status}`)
+        
+        // Execute the agentic loop
+        await this.agenticLoop.execute();
     }
 
     /**
-     * Get responses from all expert agents
+     * Continue the agentic loop with additional user input
      */
-    private async getAllExpertResponses(): Promise<void> {
-        // Call each expert incrementally so they can respond to each other
-        for(let expert of this.experts) {
-            await this.getExpertResponse(expert);
-        }
-    }
-
-    /**
-     * Get a response from a specific expert
-     */
-    private async getExpertResponse(expert: ExpertAgent): Promise<void> {
-        outputChannel.appendLine(`Got expert response from ${expert.getName()}}`);
-
-        const message = await expert.generateMessage(
-            this.session.messages,
-            true, // Stream response
-            (chunk: string) => {
-                outputChannel.appendLine(`Got expert response from ${expert.getName()}} with the message ${chunk}`)
-
-                // Handle streaming updates
-                this.notifyMessageUpdate();
-            }
-        );
-
-        // Add to session
-        this.session.messages.push(message);
-
-        // Update session timestamp
-        this.session.updated = Date.now();
-
-        // Notify listeners
-        this.notifyMessageListeners(message);
-    }
-
-    /**
-     * Get a response from the moderator
-     */
-    private async getModeratorResponse(): Promise<void> {
-        const message = await this.moderator.generateMessage(
-            this.session.messages,
-            true, // Stream response
-            () => {
-                // Handle streaming updates
-                this.notifyMessageUpdate();
-            }
-        );
-
-        // Add to session
-        this.session.messages.push(message);
-
-        // Update session timestamp
-        this.session.updated = Date.now();
-
-        // Notify listeners
-        this.notifyMessageListeners(message);
-    }
-
-    /**
-     * Add a moderator message programmatically
-     */
-    private addModeratorMessage(content: string): void {
-        const message: Message = {
-            id: uuidv4(),
-            sender: {
-                id: this.moderator.getId(),
-                name: this.moderator.getName(),
-                role: AgentRole.MODERATOR,
-                provider: this.moderator.getProviderType()
-            },
-            content,
-            timestamp: Date.now()
-        };
-
-        // Add to session
-        this.session.messages.push(message);
-
-        // Update session timestamp
-        this.session.updated = Date.now();
-
-        // Notify listeners
-        this.notifyMessageListeners(message);
+    async continueAgenticLoop(userMessage?: string): Promise<void> {
+        outputChannel.appendLine(`KBUX continuing agentic loop with user message: ${userMessage}`);
+        
+        // Execute the agentic loop with optional user message
+        await this.agenticLoop.execute(userMessage);
     }
 
     /**
@@ -269,16 +187,6 @@ export class ConversationOrchestrator {
      */
     private notifyMessageListeners(message: Message): void {
         this.messageListeners.forEach(listener => listener(message));
-    }
-
-    /**
-     * Notify that a message has been updated (streaming)
-     */
-    private notifyMessageUpdate(): void {
-        if (this.session.messages.length > 0) {
-            const lastMessage = this.session.messages[this.session.messages.length - 1];
-            this.notifyMessageListeners(lastMessage);
-        }
     }
 
     /**
@@ -324,7 +232,7 @@ export class ConversationOrchestrator {
         
         // If enabling and currently waiting, start next round
         if (enabled && this.status === ConversationStatus.WAITING_USER) {
-            this.startNextRound();
+            this.startAgenticLoop();
         }
     }
 
@@ -341,6 +249,13 @@ export class ConversationOrchestrator {
     setMaxTurns(maxTurns: number): void {
         this.maxTurns = maxTurns;
         this.session.maxTurns = maxTurns;
+        // Update agentic loop max turns
+        this.agenticLoop = new AgenticLoop(
+            this.session,
+            this.experts,
+            this.moderator,
+            maxTurns
+        );
     }
 
     /**
@@ -358,5 +273,13 @@ export class ConversationOrchestrator {
         this.session.messages = [];
         this.currentTurn = 0;
         this.setStatus(ConversationStatus.IDLE);
+        this.agenticLoop.reset();
+    }
+
+    /**
+     * Set user satisfaction (for agentic loop)
+     */
+    setUserSatisfaction(satisfied: boolean): void {
+        this.agenticLoop.setUserSatisfaction(satisfied);
     }
 } 

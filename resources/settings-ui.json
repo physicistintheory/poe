@@ -1,0 +1,26 @@
+{
+  "id": "poe-settings",
+  "title": "Panel of Experts Settings",
+  "description": "Configure API keys and settings for the Panel of Experts plugin",
+  "sections": [
+    {
+      "id": "gemini-api",
+      "title": "Gemini API",
+      "description": "Configure your Google Gemini API key for AI services",
+      "properties": {
+        "poe.geminiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Google Gemini API key for AI services",
+          "scope": "application",
+          "ui": {
+            "type": "text",
+            "label": "Gemini API Key",
+            "placeholder": "Enter your Gemini API key here",
+            "description": "Get your API key from https://makersuite.google.com/app/apikey"
+          }
+        }
+      }
+    }
+  ]
+} 
