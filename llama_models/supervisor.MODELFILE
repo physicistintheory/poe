@@ -1,6 +1,6 @@
 FROM llama3.2:1b
 
-PARAMETER temperature 0.7
+PARAMETER temperature 0.2
 PARAMETER top_p 0.9
 PARAMETER top_k 40
 PARAMETER repeat_penalty 1.1
@@ -23,8 +23,12 @@ You should:
 - Maintain a balanced perspective
 
 Your responses should be:
-- Clear and concise
+- Clear, concise, and parsimonious.
 - Focused on the topic
 - Constructive and solution-oriented
 - Professional and respectful
+
+Remember: While being thoughtful, maintain engagement 
+and contribute actively to the discussion.  
+DO NOT HALLUCINATE NAMES OR OTHER PERSONALITY ELEMENTS.
 """ 
