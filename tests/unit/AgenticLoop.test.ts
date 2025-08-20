@@ -65,12 +65,28 @@ describe('AgenticLoop', () => {
                 getName: jest.fn().mockReturnValue('ML Expert'),
                 getSpecialization: jest.fn().mockReturnValue('Machine Learning'),
                 getProviderType: jest.fn().mockReturnValue('test-provider')
+            },
+            {
+                generateMessage: jest.fn(),
+                getId: jest.fn().mockReturnValue('expert-3'),
+                getName: jest.fn().mockReturnValue('Data Scientist'),
+                getSpecialization: jest.fn().mockReturnValue('Data Science'),
+                getProviderType: jest.fn().mockReturnValue('test-provider')
             }
         ] as any;
 
         // Setup mock moderator
         mockModerator = {
-            generateMessage: jest.fn(),
+            generateMessage: jest.fn().mockResolvedValue({
+                id: 'moderator-response',
+                sender: {
+                    id: 'moderator-1',
+                    name: 'Discussion Moderator',
+                    role: AgentRole.MODERATOR
+                },
+                content: 'Could you please provide more specific details about what you\'re looking for?',
+                timestamp: Date.now()
+            }),
             getId: jest.fn().mockReturnValue('moderator-1'),
             getName: jest.fn().mockReturnValue('Discussion Moderator'),
             getProviderType: jest.fn().mockReturnValue('test-provider')
@@ -105,8 +121,8 @@ describe('AgenticLoop', () => {
     });
 
     describe('full conversation flow', () => {
-        it('should handle complete flow: question -> expert answers -> follow-up -> assessment', async () => {
-            // Mock expert responses for first round
+        it('should handle sequential expert responses with moderator decisions', async () => {
+            // Mock expert responses in sequence
             const firstExpertResponse: Message = {
                 id: 'expert-1-response',
                 sender: {
@@ -125,163 +141,112 @@ describe('AgenticLoop', () => {
                     name: 'ML Expert',
                     role: AgentRole.EXPERT
                 },
-                content: 'Machine learning is a subset of AI that focuses on algorithms that can learn from data. However, the choice between AI and ML depends on your specific use case.',
+                content: 'I agree with the AI Expert about the broad scope. However, machine learning specifically focuses on algorithms that can learn from data, which is often the most practical starting point.',
                 timestamp: Date.now()
             };
 
-            // Mock expert responses for second round
-            const firstExpertFollowUp: Message = {
-                id: 'expert-1-followup',
+            const thirdExpertResponse: Message = {
+                id: 'expert-3-response',
                 sender: {
-                    id: 'expert-1',
-                    name: 'AI Expert',
+                    id: 'expert-3',
+                    name: 'Data Scientist',
                     role: AgentRole.EXPERT
                 },
-                content: 'For your specific use case, I recommend starting with a simple machine learning approach for your recommendation system. You can always scale up to more complex AI solutions later.',
+                content: 'Both experts make good points. For implementation, I\'d recommend starting with ML since it\'s more accessible and has proven results. You can always expand to broader AI later.',
                 timestamp: Date.now()
             };
 
-            const secondExpertFollowUp: Message = {
-                id: 'expert-2-followup',
-                sender: {
-                    id: 'expert-2',
-                    name: 'ML Expert',
-                    role: AgentRole.EXPERT
-                },
-                content: 'I agree with the AI Expert. Start with supervised learning algorithms like linear regression or decision trees for your recommendation system.',
-                timestamp: Date.now()
-            };
+            // In the new 2-step approach, mock categorization to get expert response
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "expert-1", "reasoning": "AI Expert best suited"}',
+                    timestamp: Date.now()
+                });
 
-            // Setup expert response mocks
-            mockExperts[0].generateMessage = jest.fn()
-                .mockResolvedValueOnce(firstExpertResponse)
-                .mockResolvedValueOnce(firstExpertFollowUp);
-            
-            mockExperts[1].generateMessage = jest.fn()
-                .mockResolvedValueOnce(secondExpertResponse)
-                .mockResolvedValueOnce(secondExpertFollowUp);
+            // Setup expert response mock
+            mockExperts[0].generateMessage = jest.fn().mockResolvedValue(firstExpertResponse);
 
-            // Step 1: Execute with initial question
+            // Execute with initial question
             await agenticLoop.execute('What is the difference between AI and machine learning?');
 
-            // Verify first round of expert responses
-            expect(messageListener).toHaveBeenCalledTimes(3); // User message + 2 expert responses
-            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.PROCESSING);
-            
-            // Verify expert responses were added
-            const sessionAfterFirstRound = agenticLoop.getSession();
-            expect(sessionAfterFirstRound.messages).toHaveLength(3);
-            expect(sessionAfterFirstRound.messages[0].content).toBe('What is the difference between AI and machine learning?');
-            expect(sessionAfterFirstRound.messages[1].content).toContain('AI is a broad field');
-            expect(sessionAfterFirstRound.messages[2].content).toContain('Machine learning is a subset');
+            // Verify expert response was added
+            const sessionAfterFirstExpert = agenticLoop.getSession();
+            expect(sessionAfterFirstExpert.messages.length).toBe(2);
+            expect(sessionAfterFirstExpert.messages[0].content).toBe('What is the difference between AI and machine learning?');
+            expect(sessionAfterFirstExpert.messages[1].content).toContain('AI is a broad field');
 
-            // Verify expert engagement was tracked
+            // Verify only selected expert was called
             expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
-            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(1);
+            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
+            expect(mockExperts[2].generateMessage).toHaveBeenCalledTimes(0);
 
-            // Step 2: Execute with follow-up question (simulating user response)
-            messageListener.mockClear(); // Reset the mock to only count the second round
-            // Reset status to IDLE to allow next round
-            agenticLoop['status'] = ConversationStatus.IDLE;
-            await agenticLoop.execute('I want to build a recommendation system for an e-commerce site');
-
-            // Verify second round of expert responses
-            expect(messageListener).toHaveBeenCalledTimes(3); // User message + 2 expert responses
-            const sessionAfterSecondRound = agenticLoop.getSession();
-            expect(sessionAfterSecondRound.messages).toHaveLength(6);
-            expect(sessionAfterSecondRound.messages[3].content).toBe('I want to build a recommendation system for an e-commerce site');
-            expect(sessionAfterSecondRound.messages[4].content).toContain('recommend starting with a simple machine learning');
-            expect(sessionAfterSecondRound.messages[5].content).toContain('supervised learning algorithms');
-
-            // Verify both rounds of expert responses were generated
-            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(2);
-            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(2);
-
-            // Step 3: Assess the quality of both sets of answers
-            const allMessages = sessionAfterSecondRound.messages;
-            
-            // Assess first round answers
-            const firstRoundAnswers = allMessages.filter(msg => 
-                msg.sender.role === AgentRole.EXPERT && 
-                [1, 2].includes(allMessages.indexOf(msg))
-            );
-            
-            expect(firstRoundAnswers).toHaveLength(2);
-            expect(firstRoundAnswers[0].content).toContain('AI is a broad field');
-            expect(firstRoundAnswers[1].content).toContain('Machine learning is a subset');
-
-            // Assess second round answers
-            const secondRoundAnswers = allMessages.filter(msg => 
-                msg.sender.role === AgentRole.EXPERT && 
-                [4, 5].includes(allMessages.indexOf(msg))
-            );
-            
-            expect(secondRoundAnswers).toHaveLength(2);
-            expect(secondRoundAnswers[0].content).toContain('recommend starting with a simple machine learning');
-            expect(secondRoundAnswers[1].content).toContain('supervised learning algorithms');
-
-            // Verify that second round answers are more specific to the user's follow-up
-            expect(secondRoundAnswers[0].content).toContain('recommendation system');
-            expect(secondRoundAnswers[1].content).toContain('supervised learning');
+            // Verify status progression
+            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.PROCESSING);
         });
 
         it('should handle moderator intervention when question needs clarification', async () => {
-            // Mock expert responses that indicate need for clarification
-            const expertResponse1: Message = {
-                id: 'expert-1-response',
-                sender: {
-                    id: 'expert-1',
-                    name: 'AI Expert',
-                    role: AgentRole.EXPERT
-                },
-                content: 'I need more information about your specific use case. Could you clarify what type of AI application you\'re building?',
-                timestamp: Date.now()
-            };
-
-            const expertResponse2: Message = {
-                id: 'expert-2-response',
-                sender: {
-                    id: 'expert-2',
-                    name: 'ML Expert',
-                    role: AgentRole.EXPERT
-                },
-                content: 'The approach depends on your data and requirements. What kind of data do you have available?',
-                timestamp: Date.now()
-            };
-
-            const moderatorQuestion: Message = {
-                id: 'moderator-question',
-                sender: {
-                    id: 'moderator-1',
-                    name: 'Discussion Moderator',
-                    role: AgentRole.MODERATOR
-                },
-                content: 'Could you provide more specific details about what you\'re looking for?',
-                timestamp: Date.now()
-            };
-
-            // Setup mocks
-            mockExperts[0].generateMessage = jest.fn().mockResolvedValue(expertResponse1);
-            mockExperts[1].generateMessage = jest.fn().mockResolvedValue(expertResponse2);
-            mockModerator.generateMessage = jest.fn().mockResolvedValue(moderatorQuestion);
+            // In the new 2-step approach, if information is insufficient, moderator asks for clarification
+            // Mock the moderator's Query 2 to return "insufficient information"
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": false, "missingInfo": "more specific details about your AI needs", "reasoning": "question is too vague"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'moderator-question',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: 'To provide you with the best possible answer, could you please clarify: more specific details about your AI needs',
+                    timestamp: Date.now()
+                });
 
             // Execute with vague question
             await agenticLoop.execute('Tell me about AI');
 
-            // Verify expert responses
-            expect(messageListener).toHaveBeenCalledTimes(4); // User + 2 experts + moderator
+            // In the new 2-step approach: User message + Moderator clarification request
+            expect(messageListener).toHaveBeenCalledTimes(2); // User + moderator clarification
             expect(statusListener).toHaveBeenCalledWith(ConversationStatus.PROCESSING);
             expect(statusListener).toHaveBeenCalledWith(ConversationStatus.WAITING_USER);
 
             const session = agenticLoop.getSession();
-            expect(session.messages).toHaveLength(4);
-            expect(session.messages[3].sender.role).toBe(AgentRole.MODERATOR);
-            expect(session.messages[3].content).toContain('specific details');
+            expect(session.messages.length).toBe(2);
+            expect(session.messages[0].sender.role).toBe(AgentRole.USER);
+            expect(session.messages[1].sender.role).toBe(AgentRole.MODERATOR);
+            expect(session.messages[1].content).toContain('could you please clarify');
+
+            // In the new approach, no experts are called if information is insufficient
+            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(0);
+            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
         });
 
         it('should assess question resolution and discussion quality', async () => {
-            // Mock comprehensive expert responses
-            const comprehensiveResponse1: Message = {
+            // In the new 2-step approach, mock the categorization queries
+            // Query 2: Information sufficient, Query 3: Select first expert
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear specific question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "expert-1", "reasoning": "AI Expert best suited for recommendation systems"}',
+                    timestamp: Date.now()
+                });
+
+            // Mock expert response
+            const expertResponse: Message = {
                 id: 'expert-1-response',
                 sender: {
                     id: 'expert-1',
@@ -292,89 +257,161 @@ describe('AgenticLoop', () => {
                 timestamp: Date.now()
             };
 
-            const comprehensiveResponse2: Message = {
-                id: 'expert-2-response',
-                sender: {
-                    id: 'expert-2',
-                    name: 'ML Expert',
-                    role: AgentRole.EXPERT
-                },
-                content: 'I agree with the AI Expert. For e-commerce, I recommend starting with collaborative filtering using user-item matrices. Here\'s the implementation approach...',
-                timestamp: Date.now()
-            };
-
-            // Setup mocks
-            mockExperts[0].generateMessage = jest.fn().mockResolvedValue(comprehensiveResponse1);
-            mockExperts[1].generateMessage = jest.fn().mockResolvedValue(comprehensiveResponse2);
+            mockExperts[0].generateMessage = jest.fn().mockResolvedValue(expertResponse);
 
             // Execute with specific question
             await agenticLoop.execute('How do I build a recommendation system for my e-commerce site?');
 
-            // Verify responses
-            expect(messageListener).toHaveBeenCalledTimes(3); // User + 2 experts
+            // In the new 2-step approach: User message + Expert response
+            expect(messageListener).toHaveBeenCalledTimes(2); // User + expert response
             expect(statusListener).toHaveBeenCalledWith(ConversationStatus.PROCESSING);
 
             const session = agenticLoop.getSession();
-            expect(session.messages).toHaveLength(3);
+            expect(session.messages.length).toBe(2);
             
-            // Verify comprehensive answers
+            // Verify expert response
+            expect(session.messages[0].sender.role).toBe(AgentRole.USER);
+            expect(session.messages[1].sender.role).toBe(AgentRole.EXPERT);
             expect(session.messages[1].content).toContain('complete solution');
             expect(session.messages[1].content).toContain('collaborative filtering');
-            expect(session.messages[2].content).toContain('agree with the AI Expert');
-            expect(session.messages[2].content).toContain('implementation approach');
 
-            // Verify no moderator intervention needed (question well addressed)
-            expect(session.messages).toHaveLength(3); // No moderator message
+            // Verify the selected expert was called
+            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
+            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
+        });
+
+        it('should pause expert responses when moderator asks follow-up question', async () => {
+            // In the new 2-step approach, test the same scenario as the clarification test
+            // Mock the moderator's Query 2 to return "insufficient information"
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": false, "missingInfo": "specific AI application details", "reasoning": "question is too vague"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'moderator-question',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: 'To provide you with the best possible answer, could you please clarify: specific AI application details',
+                    timestamp: Date.now()
+                });
+
+            // Execute with vague question
+            await agenticLoop.execute('Tell me about AI');
+
+            // In the new 2-step approach: User message + Moderator clarification request
+            expect(messageListener).toHaveBeenCalledTimes(2); // User + moderator clarification
+            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.PROCESSING);
+            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.WAITING_USER);
+
+            const session = agenticLoop.getSession();
+            expect(session.messages).toHaveLength(2);
+            expect(session.messages[0].sender.role).toBe(AgentRole.USER);
+            expect(session.messages[1].sender.role).toBe(AgentRole.MODERATOR);
+            expect(session.messages[1].content).toContain('could you please clarify');
+
+            // In the new approach, no experts are called if information is insufficient
+            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(0);
+            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
+
+            // Step 2: Try to continue the conversation without user input
+            messageListener.mockClear();
+            agenticLoop.reset(); // Reset to idle state
+            await agenticLoop.execute(); // No new user message
+
+            // Should hit max turns logic and stay idle since no user message
+            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.IDLE);
         });
     });
 
     describe('error handling', () => {
         it('should handle expert response errors gracefully', async () => {
-            // Mock one expert to fail
+            // In the new 2-step approach, mock categorization queries to select an expert that will fail
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "expert-1", "reasoning": "first expert selected"}',
+                    timestamp: Date.now()
+                });
+
+            // Mock first expert to fail
             mockExperts[0].generateMessage = jest.fn().mockRejectedValue(new Error('API Error'));
-            mockExperts[1].generateMessage = jest.fn().mockResolvedValue({
-                id: 'expert-2-response',
-                sender: { id: 'expert-2', name: 'ML Expert', role: AgentRole.EXPERT },
-                content: 'Here is my response',
-                timestamp: Date.now()
-            });
 
             // Execute should not throw
             await expect(agenticLoop.execute('Test question')).resolves.not.toThrow();
 
-            // Should get user, expert, and moderator messages
-            expect(messageListener).toHaveBeenCalledTimes(3); // User + 1 expert + moderator
+            // Should get user message only (expert error is logged but doesn't add message)
+            expect(messageListener).toHaveBeenCalledTimes(1); // User message only
             const calls = messageListener.mock.calls.map(call => call[0]);
             expect(calls[0].sender.role).toBe(AgentRole.USER);
-            expect(calls[1].sender.role).toBe(AgentRole.EXPERT);
-            expect(calls[2].sender.role).toBe(AgentRole.MODERATOR);
-            expect(calls[2].content).toContain('discussion quality has declined');
+
+            // Verify the expert was called and failed
+            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
         });
 
         it('should handle max turns limit', async () => {
-            // Create loop with very low max turns
+            // Create loop with max turns of 1
             const limitedLoop = new AgenticLoop(mockSession, mockExperts, mockModerator, 1);
             limitedLoop.onMessage(messageListener);
             limitedLoop.onStatusChange(statusListener);
 
-            // Mock expert responses
-            mockExperts[0].generateMessage = jest.fn().mockResolvedValue({
-                id: 'expert-response',
-                sender: { id: 'expert-1', name: 'AI Expert', role: AgentRole.EXPERT },
-                content: 'Test response',
-                timestamp: Date.now()
-            });
+            // Mock categorization queries for first execution
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": false, "missingInfo": "more details needed"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'moderator-question',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: 'Could you provide more details?',
+                    timestamp: Date.now()
+                });
 
-            // Execute once to hit limit
+            // Execute once (turn 1)
             await limitedLoop.execute('First question');
 
-            // Should terminate after max turns
-            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.WAITING_USER);
+            // Execute again to hit max turns limit (turn 2, exceeds maxTurns=1)
+            await limitedLoop.execute();
+
+            // Should hit max turns and go to IDLE (after showing max turns message)
+            expect(statusListener).toHaveBeenLastCalledWith(ConversationStatus.IDLE);
+            
+            // Verify max turns message was added
+            const session = limitedLoop.getSession();
+            const lastMessage = session.messages[session.messages.length - 1];
+            expect(lastMessage.sender.role).toBe(AgentRole.MODERATOR);
+            expect(lastMessage.content).toContain('maximum number of turns');
         });
     });
 
     describe('state management', () => {
         it('should track expert engagement correctly', async () => {
+            // Mock categorization to select expert
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "expert-1", "reasoning": "first expert selected"}',
+                    timestamp: Date.now()
+                });
+
             const highQualityResponse: Message = {
                 id: 'expert-response',
                 sender: { id: 'expert-1', name: 'AI Expert', role: AgentRole.EXPERT },
@@ -386,7 +423,7 @@ describe('AgenticLoop', () => {
 
             await agenticLoop.execute('Test question');
 
-            // Verify engagement tracking
+            // Verify engagement tracking - expert message should be called
             expect(messageListener).toHaveBeenCalledWith(highQualityResponse);
         });
 

@@ -79,7 +79,9 @@ export class ConversationOrchestrator {
             if (!provider) {
                 throw new Error(`Provider ${expertConfig.provider} not found for expert ${expertConfig.name}`);
             }
-            outputChannel.appendLine(`Created expert2: ${expertConfig.name}`)
+            if (outputChannel) {
+                outputChannel.appendLine(`Created expert2: ${expertConfig.name}`);
+            }
             return new ExpertAgent(expertConfig, provider);
         });
     }
@@ -146,7 +148,9 @@ export class ConversationOrchestrator {
         this.notifyMessageListeners(message);
 
         // If auto-discuss is enabled, start the agentic loop
-        outputChannel.appendLine(`KBUX message received, autodiscuss: ${this.session.autoDiscuss}`)
+        if (outputChannel) {
+            outputChannel.appendLine(`KBUX message received, autodiscuss: ${this.session.autoDiscuss}`);
+        }
         if (this.session.autoDiscuss) {
             this.startAgenticLoop();
         } else {
@@ -158,7 +162,9 @@ export class ConversationOrchestrator {
      * Start the agentic loop
      */
     async startAgenticLoop(): Promise<void> {
-        outputChannel.appendLine(`KBUX starting agentic loop, status ${this.status}`)
+        if (outputChannel) {
+            outputChannel.appendLine(`KBUX starting agentic loop, status ${this.status}`);
+        }
         
         // Execute the agentic loop
         await this.agenticLoop.execute();
@@ -168,10 +174,24 @@ export class ConversationOrchestrator {
      * Continue the agentic loop with additional user input
      */
     async continueAgenticLoop(userMessage?: string): Promise<void> {
-        outputChannel.appendLine(`KBUX continuing agentic loop with user message: ${userMessage}`);
+        if (outputChannel) {
+            outputChannel.appendLine(`KBUX continuing agentic loop with user message: ${userMessage}`);
+        }
         
         // Execute the agentic loop with optional user message
         await this.agenticLoop.execute(userMessage);
+    }
+
+    /**
+     * Start the next round of the conversation (for test compatibility)
+     */
+    async startNextRound(): Promise<void> {
+        if (outputChannel) {
+            outputChannel.appendLine('KBUX starting next round');
+        }
+        
+        // Execute the agentic loop to start the next round
+        await this.agenticLoop.execute();
     }
 
     /**
