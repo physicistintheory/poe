@@ -76,10 +76,10 @@ export class AgenticLoop {
 
         try {
             // Step 1: Run parallel categorization queries
-            const categorizationResults = await this.executeStep1ParallelCategorization();
+            const categorizationResults = await this.runParallelCategorizationQueries();
 
             // Step 2: Execute action based on categorization results
-            await this.executeStep2Action(categorizationResults);
+            await this.executeActionBasedOnCategorization(categorizationResults);
 
         } catch (error) {
             console.error('Error during agentic loop execution:', error);
@@ -139,7 +139,7 @@ export class AgenticLoop {
     /**
      * Step 1: Execute parallel categorization queries
      */
-    private async executeStep1ParallelCategorization(): Promise<{
+    private async runParallelCategorizationQueries(): Promise<{
         questionAnswered: { answered: boolean; confidence: number };
         enoughInfo: { sufficient: boolean; missingInfo?: string };
         nextExpert: { expertId: string; reasoning: string };
@@ -148,9 +148,9 @@ export class AgenticLoop {
 
         // Run all 3 queries in parallel
         const [questionAnswered, enoughInfo, nextExpert] = await Promise.all([
-            this.query1QuestionResolution(),
-            this.query2InformationSufficiency(),
-            this.query3ExpertSelection()
+            this.isUserQuestionAnswered(),
+            this.doWeHaveEnoughInformation(),
+            this.whoShouldAnswerNext()
         ]);
 
         log(`AgenticLoop: Categorization results - Question answered: ${questionAnswered.answered} (${questionAnswered.confidence}), Enough info: ${enoughInfo.sufficient}, Next expert: ${nextExpert.expertId}`);
@@ -166,7 +166,7 @@ export class AgenticLoop {
      * Query 1: Question Resolution Assessment
      * "Is the user's question answered?"
      */
-    private async query1QuestionResolution(): Promise<{ answered: boolean; confidence: number }> {
+    private async isUserQuestionAnswered(): Promise<{ answered: boolean; confidence: number }> {
         // Skip on first iteration per user message
         if (this.isFirstIteration) {
             log('AgenticLoop: Query 1 - Skipping (first iteration)');
@@ -194,7 +194,7 @@ Respond with a JSON object:
             }], false);
 
             // Parse the response to extract the assessment
-            const assessment = this.parseQuestionResolutionResponse(response.content);
+            const assessment = this.parseUserQuestionAnsweredResponse(response.content);
             log(`AgenticLoop: Query 1 - Question answered: ${assessment.answered} (confidence: ${assessment.confidence})`);
             return assessment;
         } catch (error) {
@@ -207,9 +207,11 @@ Respond with a JSON object:
      * Query 2: Information Sufficiency Assessment
      * "Do we have enough information to engage the experts, or should we ask a clarifying question to the user?"
      */
-    private async query2InformationSufficiency(): Promise<{ sufficient: boolean; missingInfo?: string }> {
+    private async doWeHaveEnoughInformation(): Promise<{ sufficient: boolean; missingInfo?: string }> {
         const prompt = `Given the user's question and conversation context, determine if we have enough information to engage the experts effectively, or if we should ask the user for clarification.
 
+
+Rules: Error on the side of allowing the converation to start.  If the question is related at all to the experts, let them start.  If the question is not related to the experts, ask the user for clarification.
 User's question: "${this.lastUserMessage}"
 Conversation context: ${this.getRecentConversationSummary()}
 Expert capabilities: ${this.experts.map(e => e.getSpecialization()).join(', ')}
@@ -229,7 +231,7 @@ Respond with a JSON object:
                 timestamp: Date.now()
             }], false);
 
-            const assessment = this.parseInformationSufficiencyResponse(response.content);
+            const assessment = this.parseEnoughInformationResponse(response.content);
             log(`AgenticLoop: Query 2 - Enough info: ${assessment.sufficient}${assessment.missingInfo ? ` (missing: ${assessment.missingInfo})` : ''}`);
             return assessment;
         } catch (error) {
@@ -242,7 +244,7 @@ Respond with a JSON object:
      * Query 3: Expert Selection
      * "Given these descriptions of experts, including who answered last time, who should answer next?"
      */
-    private async query3ExpertSelection(): Promise<{ expertId: string; reasoning: string }> {
+    private async whoShouldAnswerNext(): Promise<{ expertId: string; reasoning: string }> {
         const expertDescriptions = this.experts.map(expert => 
             `${expert.getName()} (${expert.getId()}): ${expert.getSpecialization()}`
         ).join('\n');
@@ -256,9 +258,11 @@ Last responder: ${this.lastResponderId || 'none'}
 User's question: "${this.lastUserMessage}"
 Conversation context: ${this.getRecentConversationSummary()}
 
+IMPORTANT: You must use the exact expert ID from the descriptions above. Do not make up IDs like "expert_1" or "expert_2".
+
 Respond with a JSON object:
 {
-  "expertId": "expert_id",
+  "expertId": "exact_expert_id_from_descriptions",
   "reasoning": "brief explanation of why this expert should answer next"
 }`;
 
@@ -270,19 +274,19 @@ Respond with a JSON object:
                 timestamp: Date.now()
             }], false);
 
-            const selection = this.parseExpertSelectionResponse(response.content);
+            const selection = this.parseNextExpertSelectionResponse(response.content);
             log(`AgenticLoop: Query 3 - Selected expert: ${selection.expertId} (${selection.reasoning})`);
             return selection;
         } catch (error) {
             log(`AgenticLoop: Query 3 - Error, using fallback selection: ${error}`);
-            return this.fallbackExpertSelection();
+            return this.selectFallbackExpert();
         }
     }
 
     /**
      * Step 2: Execute action based on categorization results
      */
-    private async executeStep2Action(categorizationResults: {
+    private async executeActionBasedOnCategorization(categorizationResults: {
         questionAnswered: { answered: boolean; confidence: number };
         enoughInfo: { sufficient: boolean; missingInfo?: string };
         nextExpert: { expertId: string; reasoning: string };
@@ -293,31 +297,31 @@ Respond with a JSON object:
 
         // Action A: Request Clarification
         if (!enoughInfo.sufficient) {
-            await this.executeActionA_RequestClarification(enoughInfo.missingInfo);
+            await this.requestClarificationFromUser(enoughInfo.missingInfo);
             return;
         }
 
         // Action C: Conclude Discussion
         if (questionAnswered.answered && questionAnswered.confidence >= 0.8) {
-            await this.executeActionC_ConcludeDiscussion();
+            await this.concludeDiscussion();
             return;
         }
 
         // Action B: Expert Response
         if (enoughInfo.sufficient && !questionAnswered.answered) {
-            await this.executeActionB_ExpertResponse(nextExpert.expertId);
+            await this.getResponseFromExpert(nextExpert.expertId);
             return;
         }
 
         // Fallback: Default to expert response
         log('AgenticLoop: No clear action determined, defaulting to expert response');
-        await this.executeActionB_ExpertResponse(nextExpert.expertId);
+        await this.getResponseFromExpert(nextExpert.expertId);
     }
 
     /**
      * Action A: Request clarification from user
      */
-    private async executeActionA_RequestClarification(missingInfo?: string): Promise<void> {
+    private async requestClarificationFromUser(missingInfo?: string): Promise<void> {
         log('AgenticLoop: Action A - Requesting clarification from user');
 
         const clarificationQuestion = missingInfo 
@@ -346,24 +350,26 @@ Respond with a JSON object:
     /**
      * Action B: Get expert response
      */
-    private async executeActionB_ExpertResponse(expertId: string): Promise<void> {
+    private async getResponseFromExpert(expertId: string): Promise<void> {
         log(`AgenticLoop: Action B - Getting response from expert ${expertId}`);
 
         const expert = this.experts.find(e => e.getId() === expertId);
         if (!expert) {
-            log(`AgenticLoop: Expert ${expertId} not found, using fallback`);
+            log(`AgenticLoop: Expert ${expertId} not found, available experts: ${this.experts.map(e => e.getId()).join(', ')}`);
             const fallbackExpert = this.experts[0];
-            await this.getExpertResponse(fallbackExpert);
+            log(`AgenticLoop: Using fallback expert: ${fallbackExpert.getName()} (${fallbackExpert.getId()})`);
+            await this.getResponseFromExpertAgent(fallbackExpert);
             return;
         }
 
-        await this.getExpertResponse(expert);
+        log(`AgenticLoop: Found expert: ${expert.getName()} (${expert.getId()})`);
+        await this.getResponseFromExpertAgent(expert);
     }
 
     /**
      * Action C: Conclude discussion
      */
-    private async executeActionC_ConcludeDiscussion(): Promise<void> {
+    private async concludeDiscussion(): Promise<void> {
         log('AgenticLoop: Action C - Concluding discussion');
 
         const summary = await this.generateDiscussionSummary();
@@ -389,7 +395,7 @@ Respond with a JSON object:
     /**
      * Get a response from a specific expert
      */
-    private async getExpertResponse(expert: ExpertAgent): Promise<void> {
+    private async getResponseFromExpertAgent(expert: ExpertAgent): Promise<void> {
         log(`AgenticLoop: Getting response from expert ${expert.getName()}`);
 
         try {
@@ -440,7 +446,7 @@ Provide a brief summary that captures the main insights and recommendations.`;
     /**
      * Helper methods for parsing LLM responses
      */
-    private parseQuestionResolutionResponse(content: string): { answered: boolean; confidence: number } {
+    private parseUserQuestionAnsweredResponse(content: string): { answered: boolean; confidence: number } {
         try {
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
@@ -462,7 +468,7 @@ Provide a brief summary that captures the main insights and recommendations.`;
         return { answered, confidence };
     }
 
-    private parseInformationSufficiencyResponse(content: string): { sufficient: boolean; missingInfo?: string } {
+    private parseEnoughInformationResponse(content: string): { sufficient: boolean; missingInfo?: string } {
         try {
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
@@ -483,24 +489,31 @@ Provide a brief summary that captures the main insights and recommendations.`;
         return { sufficient };
     }
 
-    private parseExpertSelectionResponse(content: string): { expertId: string; reasoning: string } {
+    private parseNextExpertSelectionResponse(content: string): { expertId: string; reasoning: string } {
         try {
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
-                return {
-                    expertId: parsed.expertId || '',
-                    reasoning: parsed.reasoning || ''
-                };
+                const expertId = parsed.expertId || '';
+                const reasoning = parsed.reasoning || '';
+                
+                // Validate that the expert ID actually exists
+                const expertExists = this.experts.some(expert => expert.getId() === expertId);
+                if (expertExists) {
+                    return { expertId, reasoning };
+                } else {
+                    log(`AgenticLoop: Parsed expert ID "${expertId}" does not exist, using fallback`);
+                    return this.selectFallbackExpert();
+                }
             }
         } catch (error) {
             log(`AgenticLoop: Error parsing expert selection response: ${error}`);
         }
         
-        return this.fallbackExpertSelection();
+        return this.selectFallbackExpert();
     }
 
-    private fallbackExpertSelection(): { expertId: string; reasoning: string } {
+    private selectFallbackExpert(): { expertId: string; reasoning: string } {
         // Find an expert who hasn't responded recently
         const recentExpertIds = this.session.messages
             .slice(-3)
