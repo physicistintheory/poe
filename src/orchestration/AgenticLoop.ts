@@ -71,15 +71,15 @@ export class AgenticLoop {
         
         // Initialize loop with new user message if provided
         if (!this.initializeLoop(userMessage)) {
+            log(`AgenticLoop: Loop initialization failed, exiting`);
             return;
         }
 
         try {
-            // Step 1: Run parallel categorization queries
-            const categorizationResults = await this.runParallelCategorizationQueries();
-
-            // Step 2: Execute action based on categorization results
-            await this.executeActionBasedOnCategorization(categorizationResults);
+            log(`AgenticLoop: Starting discussion loop...`);
+            // Continue the loop until the discussion is complete
+            await this.runDiscussionLoop();
+            log(`AgenticLoop: Discussion loop completed`);
 
         } catch (error) {
             console.error('Error during agentic loop execution:', error);
@@ -88,14 +88,71 @@ export class AgenticLoop {
     }
 
     /**
+     * Run the discussion loop until completion
+     */
+    private async runDiscussionLoop(): Promise<void> {
+        let shouldContinue = true;
+        let consecutiveNoProgress = 0;
+        const maxNoProgress = 3; // Prevent infinite loops
+
+        log(`AgenticLoop: Starting discussion loop with maxTurns=${this.maxTurns}, currentTurn=${this.currentTurn}`);
+
+        while (shouldContinue && this.currentTurn < this.maxTurns && consecutiveNoProgress < maxNoProgress) {
+            log(`AgenticLoop: Discussion loop iteration ${this.currentTurn}, consecutive no progress: ${consecutiveNoProgress}`);
+
+            // Step 1: Run parallel categorization queries
+            log(`AgenticLoop: Running parallel categorization queries...`);
+            const categorizationResults = await this.runParallelCategorizationQueries();
+
+            // Step 2: Execute action based on categorization results
+            log(`AgenticLoop: Executing action based on categorization...`);
+            const actionResult = await this.executeActionBasedOnCategorization(categorizationResults);
+
+            // Check if we should continue
+            if (actionResult === 'conclude' || actionResult === 'wait_for_user') {
+                shouldContinue = false;
+                log(`AgenticLoop: Discussion loop ending - ${actionResult}`);
+            } else if (actionResult === 'expert_responded') {
+                consecutiveNoProgress = 0; // Reset counter when an expert responds
+                log(`AgenticLoop: Expert responded, continuing discussion`);
+            } else {
+                consecutiveNoProgress++;
+                log(`AgenticLoop: No progress made, incrementing counter to ${consecutiveNoProgress}`);
+            }
+
+            log(`AgenticLoop: Loop state - shouldContinue: ${shouldContinue}, currentTurn: ${this.currentTurn}, maxTurns: ${this.maxTurns}, consecutiveNoProgress: ${consecutiveNoProgress}`);
+
+            // Increment turn counter for next iteration
+            this.currentTurn++;
+
+            // Small delay to prevent rapid-fire API calls
+            if (shouldContinue) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        if (consecutiveNoProgress >= maxNoProgress) {
+            log(`AgenticLoop: Max consecutive no progress reached, concluding discussion`);
+            await this.concludeDiscussion();
+        } else if (this.currentTurn >= this.maxTurns) {
+            log(`AgenticLoop: Max turns reached, concluding discussion`);
+            await this.concludeDiscussion();
+        }
+    }
+
+    /**
      * Initialize the loop with new user message if provided
      */
     private initializeLoop(userMessage?: string): boolean {
+        log(`AgenticLoop: Initializing loop, current status: ${this.status}`);
+        
         if (this.status === ConversationStatus.PROCESSING) {
             log('AgenticLoop: Already processing, skipping initialization');
             return false;
         }
 
+        log(`AgenticLoop: Checking turns - currentTurn: ${this.currentTurn}, maxTurns: ${this.maxTurns}`);
+        
         if (this.currentTurn >= this.maxTurns) {
             log('AgenticLoop: Max turns reached, terminating');
             this.setStatus(ConversationStatus.IDLE);
@@ -133,6 +190,7 @@ export class AgenticLoop {
         this.currentTurn++;
 
         log(`AgenticLoop: Initialized loop, turn ${this.currentTurn}, user message: "${this.lastUserMessage}"`);
+        log(`AgenticLoop: Initialization successful, returning true`);
         return true;
     }
 
@@ -258,7 +316,10 @@ Last responder: ${this.lastResponderId || 'none'}
 User's question: "${this.lastUserMessage}"
 Conversation context: ${this.getRecentConversationSummary()}
 
-IMPORTANT: You must use the exact expert ID from the descriptions above. Do not make up IDs like "expert_1" or "expert_2".
+CRITICAL RULES:
+1. You must use the exact expert ID from the descriptions above. Do not make up IDs like "expert_1" or "expert_2".
+2. DO NOT select the same expert who answered last (${this.lastResponderId || 'none'}). Choose a different expert.
+3. If there's only one expert available, you may select them, but prefer variety when possible.
 
 Respond with a JSON object:
 {
@@ -276,6 +337,13 @@ Respond with a JSON object:
 
             const selection = this.parseNextExpertSelectionResponse(response.content);
             log(`AgenticLoop: Query 3 - Selected expert: ${selection.expertId} (${selection.reasoning})`);
+            
+            // Validate that the selected expert is different from the last responder
+            if (selection.expertId === this.lastResponderId && this.experts.length > 1) {
+                log(`AgenticLoop: Warning - Same expert selected again (${selection.expertId}), using fallback selection`);
+                return this.selectFallbackExpert();
+            }
+            
             return selection;
         } catch (error) {
             log(`AgenticLoop: Query 3 - Error, using fallback selection: ${error}`);
@@ -290,7 +358,7 @@ Respond with a JSON object:
         questionAnswered: { answered: boolean; confidence: number };
         enoughInfo: { sufficient: boolean; missingInfo?: string };
         nextExpert: { expertId: string; reasoning: string };
-    }): Promise<void> {
+    }): Promise<string> {
         log('AgenticLoop: Step 2 - Executing action based on categorization');
 
         const { questionAnswered, enoughInfo, nextExpert } = categorizationResults;
@@ -298,24 +366,25 @@ Respond with a JSON object:
         // Action A: Request Clarification
         if (!enoughInfo.sufficient) {
             await this.requestClarificationFromUser(enoughInfo.missingInfo);
-            return;
+            return 'wait_for_user';
         }
 
         // Action C: Conclude Discussion
         if (questionAnswered.answered && questionAnswered.confidence >= 0.8) {
             await this.concludeDiscussion();
-            return;
+            return 'conclude';
         }
 
         // Action B: Expert Response
         if (enoughInfo.sufficient && !questionAnswered.answered) {
             await this.getResponseFromExpert(nextExpert.expertId);
-            return;
+            return 'expert_responded';
         }
 
         // Fallback: Default to expert response
         log('AgenticLoop: No clear action determined, defaulting to expert response');
         await this.getResponseFromExpert(nextExpert.expertId);
+        return 'expert_responded';
     }
 
     /**
@@ -324,27 +393,54 @@ Respond with a JSON object:
     private async requestClarificationFromUser(missingInfo?: string): Promise<void> {
         log('AgenticLoop: Action A - Requesting clarification from user');
 
-        const clarificationQuestion = missingInfo 
-            ? `To provide you with the best possible answer, could you please clarify: ${missingInfo}`
-            : "Could you please provide more specific details about what you're looking for?";
+        // Instead of the moderator asking, let an expert ask for clarification
+        // This feels more natural and keeps the moderator in the background
+        const clarificationPrompt = missingInfo 
+            ? `The user's question needs clarification. Please ask them to clarify: ${missingInfo}`
+            : "The user's question is unclear. Please ask them to provide more specific details about what they're looking for.";
 
-        const message: Message = {
-            id: uuidv4(),
-            sender: {
-                id: this.moderator.getId(),
-                name: this.moderator.getName(),
-                role: AgentRole.MODERATOR,
-                provider: this.moderator.getProviderType()
-            },
-            content: clarificationQuestion,
-            timestamp: Date.now()
-        };
+        // Use the first available expert to ask for clarification
+        // This feels more natural and keeps the moderator in the background
+        const expert = this.experts[0];
+        
+        try {
+            // Create a system message to guide the expert
+            const systemMessage: Message = {
+                id: uuidv4(),
+                sender: { id: 'system', name: 'System', role: AgentRole.USER },
+                content: clarificationPrompt,
+                timestamp: Date.now()
+            };
+            
+            const message = await expert.generateMessage([systemMessage], false);
 
-        this.session.messages.push(message);
-        this.session.updated = Date.now();
-        this.pendingUserInput = true;
-        this.notifyMessageListeners(message);
-        this.setStatus(ConversationStatus.WAITING_USER);
+            this.session.messages.push(message);
+            this.session.updated = Date.now();
+            this.pendingUserInput = true;
+            this.notifyMessageListeners(message);
+            this.setStatus(ConversationStatus.WAITING_USER);
+        } catch (error) {
+            log(`AgenticLoop: Error getting clarification from expert: ${error}`);
+            // Fallback to a simple system message if expert fails
+            const fallbackMessage: Message = {
+                id: uuidv4(),
+                sender: {
+                    id: 'system',
+                    name: 'System',
+                    role: AgentRole.USER
+                },
+                content: missingInfo 
+                    ? `Could you please clarify: ${missingInfo}?`
+                    : "Could you please provide more specific details about what you're looking for?",
+                timestamp: Date.now()
+            };
+            
+            this.session.messages.push(fallbackMessage);
+            this.session.updated = Date.now();
+            this.pendingUserInput = true;
+            this.notifyMessageListeners(fallbackMessage);
+            this.setStatus(ConversationStatus.WAITING_USER);
+        }
     }
 
     /**
@@ -372,24 +468,45 @@ Respond with a JSON object:
     private async concludeDiscussion(): Promise<void> {
         log('AgenticLoop: Action C - Concluding discussion');
 
-        const summary = await this.generateDiscussionSummary();
+        // Instead of the moderator providing a summary, let the last expert provide a natural conclusion
+        // This feels more conversational and keeps the moderator in the background
+        const lastExpert = this.experts.find(e => e.getId() === this.lastResponderId) || this.experts[0];
         
-        const message: Message = {
-            id: uuidv4(),
-            sender: {
-                id: this.moderator.getId(),
-                name: this.moderator.getName(),
-                role: AgentRole.MODERATOR,
-                provider: this.moderator.getProviderType()
-            },
-            content: summary,
-            timestamp: Date.now()
-        };
-
-        this.session.messages.push(message);
-        this.session.updated = Date.now();
-        this.notifyMessageListeners(message);
-        this.setStatus(ConversationStatus.WAITING_USER);
+        try {
+            const conclusionPrompt = `The discussion has reached a good conclusion. Please provide a brief, natural summary of the key points and recommendations from our conversation. Keep it conversational and helpful.`;
+            
+            const systemMessage: Message = {
+                id: uuidv4(),
+                sender: { id: 'system', name: 'System', role: AgentRole.USER },
+                content: conclusionPrompt,
+                timestamp: Date.now()
+            };
+            
+            const message = await lastExpert.generateMessage([systemMessage], false);
+            
+            this.session.messages.push(message);
+            this.session.updated = Date.now();
+            this.notifyMessageListeners(message);
+            this.setStatus(ConversationStatus.WAITING_USER);
+        } catch (error) {
+            log(`AgenticLoop: Error getting conclusion from expert: ${error}`);
+            // Fallback to a simple conclusion if expert fails
+            const fallbackMessage: Message = {
+                id: uuidv4(),
+                sender: {
+                    id: lastExpert.getId(),
+                    name: lastExpert.getName(),
+                    role: AgentRole.EXPERT
+                },
+                content: "I think we've covered the key aspects of your question. Feel free to ask any follow-up questions if you need clarification on any points.",
+                timestamp: Date.now()
+            };
+            
+            this.session.messages.push(fallbackMessage);
+            this.session.updated = Date.now();
+            this.notifyMessageListeners(fallbackMessage);
+            this.setStatus(ConversationStatus.WAITING_USER);
+        }
     }
 
     /**
@@ -418,30 +535,7 @@ Respond with a JSON object:
         }
     }
 
-    /**
-     * Generate a discussion summary for conclusion
-     */
-    private async generateDiscussionSummary(): Promise<string> {
-        const prompt = `Based on the conversation history, provide a concise summary of the key points and conclusions reached.
 
-Conversation history: ${this.getRecentConversationSummary()}
-User's original question: "${this.lastUserMessage}"
-
-Provide a brief summary that captures the main insights and recommendations.`;
-
-        try {
-            const response = await this.moderator.generateMessage([{
-                id: uuidv4(),
-                sender: { id: 'system', name: 'System', role: AgentRole.MODERATOR },
-                content: prompt,
-                timestamp: Date.now()
-            }], false);
-
-            return response.content;
-        } catch (error) {
-            return "We've covered the key aspects of your question. Feel free to ask any follow-up questions if you need clarification on any points.";
-        }
-    }
 
     /**
      * Helper methods for parsing LLM responses
@@ -514,19 +608,43 @@ Provide a brief summary that captures the main insights and recommendations.`;
     }
 
     private selectFallbackExpert(): { expertId: string; reasoning: string } {
-        // Find an expert who hasn't responded recently
+        // If there's only one expert, we have no choice
+        if (this.experts.length === 1) {
+            return {
+                expertId: this.experts[0].getId(),
+                reasoning: 'Only one expert available'
+            };
+        }
+        
+        // Find an expert who hasn't responded recently, prioritizing different from last responder
         const recentExpertIds = this.session.messages
             .slice(-3)
             .filter(msg => msg.sender?.role === AgentRole.EXPERT)
             .map(msg => msg.sender?.id);
 
-        const availableExpert = this.experts.find(expert => 
+        // First, try to find an expert who is different from the last responder
+        let availableExpert = this.experts.find(expert => 
+            expert.getId() !== this.lastResponderId && 
             !recentExpertIds.includes(expert.getId())
-        ) || this.experts[0];
+        );
+        
+        // If no expert found, just avoid the last responder
+        if (!availableExpert) {
+            availableExpert = this.experts.find(expert => 
+                expert.getId() !== this.lastResponderId
+            );
+        }
+        
+        // If still no expert found (shouldn't happen with multiple experts), use the first one
+        if (!availableExpert) {
+            availableExpert = this.experts[0];
+        }
 
+        log(`AgenticLoop: Fallback expert selection - Last responder: ${this.lastResponderId}, Selected: ${availableExpert.getId()}`);
+        
         return {
             expertId: availableExpert.getId(),
-            reasoning: 'Fallback selection - expert available for response'
+            reasoning: `Fallback selection - avoiding last responder (${this.lastResponderId})`
         };
     }
 
@@ -536,7 +654,8 @@ Provide a brief summary that captures the main insights and recommendations.`;
     private getRecentConversationSummary(): string {
         const recentMessages = this.session.messages.slice(-10);
         return recentMessages
-            .map(msg => `${msg.sender?.name || 'Unknown'}: ${msg.content}`)
+            .filter(msg => msg && msg.sender && msg.content) // Filter out invalid messages
+            .map(msg => `${msg.sender.name || 'Unknown'}: ${msg.content}`)
             .join('\n');
     }
 

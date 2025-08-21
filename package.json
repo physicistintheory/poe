@@ -129,6 +129,13 @@
 		"build": "tsc && cp -r resources dist/",
 		"dev": "tsc --watch",
 		"test": "jest",
+		"test:e2e": "for test in tests/e2e/*.test.js; do echo \"Running $test...\"; node \"$test\"; echo \"\"; done",
+		"test:e2e:integration": "node tests/e2e/agentic-loop-integration.test.js",
+		"test:e2e:logic": "node tests/e2e/agentic-loop-logic.test.js",
+		"test:e2e:debug": "node tests/e2e/agentic-loop-debug.test.js",
+		"test:e2e:moderator": "node tests/e2e/moderator-behavior.test.js",
+		"test:e2e:rotation": "node tests/e2e/expert-rotation.test.js",
+		"test:e2e:length": "node tests/e2e/expert-response-length.test.js",
 		"lint": "eslint src/**/*.ts",
 		"prepare": "husky install",
 		"precommit": "npm run lint && npm run build"

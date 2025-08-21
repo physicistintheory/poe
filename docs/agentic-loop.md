@@ -1,5 +1,8 @@
 # Panel of Experts - Agentic Loop (2-Step Problem Approach)
 
+# Example Question
+i currently use react and django/python  and my manager wants to replace this with nextjs, help me debate him.
+
 ## System Overview
 This diagram shows the new 2-step agentic loop with parallel categorization queries.
 

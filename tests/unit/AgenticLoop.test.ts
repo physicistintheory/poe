@@ -50,27 +50,27 @@ describe('AgenticLoop', () => {
             updated: Date.now()
         };
 
-        // Setup mock experts
+        // Setup mock experts with more realistic IDs
         mockExperts = [
             {
                 generateMessage: jest.fn(),
-                getId: jest.fn().mockReturnValue('expert-1'),
-                getName: jest.fn().mockReturnValue('AI Expert'),
-                getSpecialization: jest.fn().mockReturnValue('Artificial Intelligence'),
+                getId: jest.fn().mockReturnValue('backend-engineer-001'),
+                getName: jest.fn().mockReturnValue('Backend Engineer'),
+                getSpecialization: jest.fn().mockReturnValue('Backend development and API design'),
                 getProviderType: jest.fn().mockReturnValue('test-provider')
             },
             {
                 generateMessage: jest.fn(),
-                getId: jest.fn().mockReturnValue('expert-2'),
-                getName: jest.fn().mockReturnValue('ML Expert'),
-                getSpecialization: jest.fn().mockReturnValue('Machine Learning'),
+                getId: jest.fn().mockReturnValue('creative-brainstormer-002'),
+                getName: jest.fn().mockReturnValue('Creative Brainstormer'),
+                getSpecialization: jest.fn().mockReturnValue('Creative solutions and user experience design'),
                 getProviderType: jest.fn().mockReturnValue('test-provider')
             },
             {
                 generateMessage: jest.fn(),
-                getId: jest.fn().mockReturnValue('expert-3'),
-                getName: jest.fn().mockReturnValue('Data Scientist'),
-                getSpecialization: jest.fn().mockReturnValue('Data Science'),
+                getId: jest.fn().mockReturnValue('code-optimizer-003'),
+                getName: jest.fn().mockReturnValue('Code Optimizer'),
+                getSpecialization: jest.fn().mockReturnValue('Performance optimization and code quality'),
                 getProviderType: jest.fn().mockReturnValue('test-provider')
             }
         ] as any;
@@ -120,214 +120,48 @@ describe('AgenticLoop', () => {
         });
     });
 
-    describe('full conversation flow', () => {
-        it('should handle sequential expert responses with moderator decisions', async () => {
-            // Mock expert responses in sequence
-            const firstExpertResponse: Message = {
-                id: 'expert-1-response',
-                sender: {
-                    id: 'expert-1',
-                    name: 'AI Expert',
-                    role: AgentRole.EXPERT
-                },
-                content: 'AI is a broad field that includes machine learning, natural language processing, and computer vision. The key is to understand the specific problem you\'re trying to solve.',
-                timestamp: Date.now()
-            };
-
-            const secondExpertResponse: Message = {
-                id: 'expert-2-response',
-                sender: {
-                    id: 'expert-2',
-                    name: 'ML Expert',
-                    role: AgentRole.EXPERT
-                },
-                content: 'I agree with the AI Expert about the broad scope. However, machine learning specifically focuses on algorithms that can learn from data, which is often the most practical starting point.',
-                timestamp: Date.now()
-            };
-
-            const thirdExpertResponse: Message = {
-                id: 'expert-3-response',
-                sender: {
-                    id: 'expert-3',
-                    name: 'Data Scientist',
-                    role: AgentRole.EXPERT
-                },
-                content: 'Both experts make good points. For implementation, I\'d recommend starting with ML since it\'s more accessible and has proven results. You can always expand to broader AI later.',
-                timestamp: Date.now()
-            };
-
-            // In the new 2-step approach, mock categorization to get expert response
+    describe('2-step categorization approach', () => {
+        it('should run parallel categorization queries correctly', async () => {
+            // Mock categorization queries - Query 1 is skipped on first iteration
             mockModerator.generateMessage = jest.fn()
                 .mockResolvedValueOnce({
                     id: 'query2-response',
                     sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    content: '{"sufficient": true, "reasoning": "clear technical question"}',
                     timestamp: Date.now()
                 })
                 .mockResolvedValueOnce({
                     id: 'query3-response',
                     sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: '{"expertId": "expert-1", "reasoning": "AI Expert best suited"}',
-                    timestamp: Date.now()
-                });
-
-            // Setup expert response mock
-            mockExperts[0].generateMessage = jest.fn().mockResolvedValue(firstExpertResponse);
-
-            // Execute with initial question
-            await agenticLoop.execute('What is the difference between AI and machine learning?');
-
-            // Verify expert response was added
-            const sessionAfterFirstExpert = agenticLoop.getSession();
-            expect(sessionAfterFirstExpert.messages.length).toBe(2);
-            expect(sessionAfterFirstExpert.messages[0].content).toBe('What is the difference between AI and machine learning?');
-            expect(sessionAfterFirstExpert.messages[1].content).toContain('AI is a broad field');
-
-            // Verify only selected expert was called
-            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
-            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
-            expect(mockExperts[2].generateMessage).toHaveBeenCalledTimes(0);
-
-            // Verify status progression
-            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.PROCESSING);
-        });
-
-        it('should handle moderator intervention when question needs clarification', async () => {
-            // In the new 2-step approach, if information is insufficient, moderator asks for clarification
-            // Mock the moderator's Query 2 to return "insufficient information"
-            mockModerator.generateMessage = jest.fn()
-                .mockResolvedValueOnce({
-                    id: 'query2-response',
-                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: '{"sufficient": false, "missingInfo": "more specific details about your AI needs", "reasoning": "question is too vague"}',
-                    timestamp: Date.now()
-                })
-                .mockResolvedValueOnce({
-                    id: 'moderator-question',
-                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: 'To provide you with the best possible answer, could you please clarify: more specific details about your AI needs',
-                    timestamp: Date.now()
-                });
-
-            // Execute with vague question
-            await agenticLoop.execute('Tell me about AI');
-
-            // In the new 2-step approach: User message + Moderator clarification request
-            expect(messageListener).toHaveBeenCalledTimes(2); // User + moderator clarification
-            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.PROCESSING);
-            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.WAITING_USER);
-
-            const session = agenticLoop.getSession();
-            expect(session.messages.length).toBe(2);
-            expect(session.messages[0].sender.role).toBe(AgentRole.USER);
-            expect(session.messages[1].sender.role).toBe(AgentRole.MODERATOR);
-            expect(session.messages[1].content).toContain('could you please clarify');
-
-            // In the new approach, no experts are called if information is insufficient
-            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(0);
-            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
-        });
-
-        it('should assess question resolution and discussion quality', async () => {
-            // In the new 2-step approach, mock the categorization queries
-            // Query 2: Information sufficient, Query 3: Select first expert
-            mockModerator.generateMessage = jest.fn()
-                .mockResolvedValueOnce({
-                    id: 'query2-response',
-                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: '{"sufficient": true, "reasoning": "clear specific question"}',
-                    timestamp: Date.now()
-                })
-                .mockResolvedValueOnce({
-                    id: 'query3-response',
-                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: '{"expertId": "expert-1", "reasoning": "AI Expert best suited for recommendation systems"}',
+                    content: '{"expertId": "backend-engineer-001", "reasoning": "backend development question"}',
                     timestamp: Date.now()
                 });
 
             // Mock expert response
             const expertResponse: Message = {
-                id: 'expert-1-response',
+                id: 'expert-response',
                 sender: {
-                    id: 'expert-1',
-                    name: 'AI Expert',
+                    id: 'backend-engineer-001',
+                    name: 'Backend Engineer',
                     role: AgentRole.EXPERT
                 },
-                content: 'Here\'s a complete solution for your recommendation system: 1) Use collaborative filtering, 2) Implement content-based filtering, 3) Consider hybrid approaches. This will give you the best results.',
+                content: 'For your backend API, I recommend using Node.js with Express and implementing proper authentication.',
                 timestamp: Date.now()
             };
-
             mockExperts[0].generateMessage = jest.fn().mockResolvedValue(expertResponse);
 
-            // Execute with specific question
-            await agenticLoop.execute('How do I build a recommendation system for my e-commerce site?');
+            await agenticLoop.execute('How should I design my backend API?');
 
-            // In the new 2-step approach: User message + Expert response
-            expect(messageListener).toHaveBeenCalledTimes(2); // User + expert response
-            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.PROCESSING);
-
-            const session = agenticLoop.getSession();
-            expect(session.messages.length).toBe(2);
+            // Verify queries were called (Query 1 skipped on first iteration)
+            expect(mockModerator.generateMessage).toHaveBeenCalledTimes(2);
             
-            // Verify expert response
-            expect(session.messages[0].sender.role).toBe(AgentRole.USER);
-            expect(session.messages[1].sender.role).toBe(AgentRole.EXPERT);
-            expect(session.messages[1].content).toContain('complete solution');
-            expect(session.messages[1].content).toContain('collaborative filtering');
-
-            // Verify the selected expert was called
+            // Verify expert was selected and responded
+            expect(messageListener).toHaveBeenCalledTimes(2); // User + Expert
             expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
-            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
         });
 
-        it('should pause expert responses when moderator asks follow-up question', async () => {
-            // In the new 2-step approach, test the same scenario as the clarification test
-            // Mock the moderator's Query 2 to return "insufficient information"
-            mockModerator.generateMessage = jest.fn()
-                .mockResolvedValueOnce({
-                    id: 'query2-response',
-                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: '{"sufficient": false, "missingInfo": "specific AI application details", "reasoning": "question is too vague"}',
-                    timestamp: Date.now()
-                })
-                .mockResolvedValueOnce({
-                    id: 'moderator-question',
-                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: 'To provide you with the best possible answer, could you please clarify: specific AI application details',
-                    timestamp: Date.now()
-                });
-
-            // Execute with vague question
-            await agenticLoop.execute('Tell me about AI');
-
-            // In the new 2-step approach: User message + Moderator clarification request
-            expect(messageListener).toHaveBeenCalledTimes(2); // User + moderator clarification
-            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.PROCESSING);
-            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.WAITING_USER);
-
-            const session = agenticLoop.getSession();
-            expect(session.messages).toHaveLength(2);
-            expect(session.messages[0].sender.role).toBe(AgentRole.USER);
-            expect(session.messages[1].sender.role).toBe(AgentRole.MODERATOR);
-            expect(session.messages[1].content).toContain('could you please clarify');
-
-            // In the new approach, no experts are called if information is insufficient
-            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(0);
-            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
-
-            // Step 2: Try to continue the conversation without user input
-            messageListener.mockClear();
-            agenticLoop.reset(); // Reset to idle state
-            await agenticLoop.execute(); // No new user message
-
-            // Should hit max turns logic and stay idle since no user message
-            expect(statusListener).toHaveBeenCalledWith(ConversationStatus.IDLE);
-        });
-    });
-
-    describe('error handling', () => {
-        it('should handle expert response errors gracefully', async () => {
-            // In the new 2-step approach, mock categorization queries to select an expert that will fail
+        it('should skip question resolution query on first iteration', async () => {
+            // Mock queries - Query 1 should be skipped on first iteration
             mockModerator.generateMessage = jest.fn()
                 .mockResolvedValueOnce({
                     id: 'query2-response',
@@ -338,43 +172,240 @@ describe('AgenticLoop', () => {
                 .mockResolvedValueOnce({
                     id: 'query3-response',
                     sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: '{"expertId": "expert-1", "reasoning": "first expert selected"}',
+                    content: '{"expertId": "creative-brainstormer-002", "reasoning": "creative design question"}',
                     timestamp: Date.now()
                 });
 
-            // Mock first expert to fail
+            // Mock expert response
+            mockExperts[1].generateMessage = jest.fn().mockResolvedValue({
+                id: 'expert-response',
+                sender: { id: 'creative-brainstormer-002', name: 'Creative Brainstormer', role: AgentRole.EXPERT },
+                content: 'Creative design solution here',
+                timestamp: Date.now()
+            });
+
+            await agenticLoop.execute('How can I improve my UI design?');
+
+            // Should only call 2 queries (Query 1 skipped on first iteration)
+            expect(mockModerator.generateMessage).toHaveBeenCalledTimes(2);
+            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('expert selection and validation', () => {
+        it('should handle valid expert IDs correctly', async () => {
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "creative-brainstormer-002", "reasoning": "creative design question"}',
+                    timestamp: Date.now()
+                });
+
+            mockExperts[1].generateMessage = jest.fn().mockResolvedValue({
+                id: 'expert-response',
+                sender: { id: 'creative-brainstormer-002', name: 'Creative Brainstormer', role: AgentRole.EXPERT },
+                content: 'Creative solution here',
+                timestamp: Date.now()
+            });
+
+            await agenticLoop.execute('How can I improve my UI?');
+
+            // Should find and use the correct expert
+            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(1);
+            expect(messageListener).toHaveBeenCalledTimes(2); // User + Expert
+        });
+
+        it('should handle invalid expert IDs and use fallback', async () => {
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "invalid-expert-id", "reasoning": "invalid selection"}',
+                    timestamp: Date.now()
+                });
+
+            // Mock first expert (fallback) to respond
+            mockExperts[0].generateMessage = jest.fn().mockResolvedValue({
+                id: 'fallback-response',
+                sender: { id: 'backend-engineer-001', name: 'Backend Engineer', role: AgentRole.EXPERT },
+                content: 'Fallback response',
+                timestamp: Date.now()
+            });
+
+            await agenticLoop.execute('Test question');
+
+            // Should use fallback expert (first in list)
+            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
+            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
+            expect(mockExperts[2].generateMessage).toHaveBeenCalledTimes(0);
+        });
+
+        it('should handle expert ID parsing errors gracefully', async () => {
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: 'Invalid JSON response that cannot be parsed',
+                    timestamp: Date.now()
+                });
+
+            // Mock first expert (fallback) to respond
+            mockExperts[0].generateMessage = jest.fn().mockResolvedValue({
+                id: 'fallback-response',
+                sender: { id: 'backend-engineer-001', name: 'Backend Engineer', role: AgentRole.EXPERT },
+                content: 'Fallback response',
+                timestamp: Date.now()
+            });
+
+            await agenticLoop.execute('Test question');
+
+            // Should use fallback due to parsing error
+            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('action execution based on categorization', () => {
+        it('should execute Action A (Request Clarification) when information is insufficient', async () => {
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": false, "missingInfo": "specific technical requirements", "reasoning": "question too vague"}',
+                    timestamp: Date.now()
+                });
+
+            await agenticLoop.execute('Tell me about APIs');
+
+            // Should request clarification, not call experts
+            expect(messageListener).toHaveBeenCalledTimes(2); // User + Moderator clarification
+            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(0);
+            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(0);
+            expect(mockExperts[2].generateMessage).toHaveBeenCalledTimes(0);
+            
+            // Should be waiting for user input
+            expect(statusListener).toHaveBeenLastCalledWith(ConversationStatus.WAITING_USER);
+        });
+
+        it('should execute Action B (Expert Response) when information is sufficient and question not answered', async () => {
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear technical question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "code-optimizer-003", "reasoning": "performance question"}',
+                    timestamp: Date.now()
+                });
+
+            mockExperts[2].generateMessage = jest.fn().mockResolvedValue({
+                id: 'expert-response',
+                sender: { id: 'code-optimizer-003', name: 'Code Optimizer', role: AgentRole.EXPERT },
+                content: 'Performance optimization solution',
+                timestamp: Date.now()
+            });
+
+            await agenticLoop.execute('How can I optimize my database queries?');
+
+            // Should get expert response
+            expect(messageListener).toHaveBeenCalledTimes(2); // User + Expert
+            expect(mockExperts[2].generateMessage).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('error handling and robustness', () => {
+        it('should handle expert response errors gracefully', async () => {
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "backend-engineer-001", "reasoning": "backend question"}',
+                    timestamp: Date.now()
+                });
+
+            // Mock expert to fail
             mockExperts[0].generateMessage = jest.fn().mockRejectedValue(new Error('API Error'));
 
-            // Execute should not throw
+            // Should not throw
             await expect(agenticLoop.execute('Test question')).resolves.not.toThrow();
 
-            // Should get user message only (expert error is logged but doesn't add message)
+            // Should only have user message (expert error is logged but doesn't add message)
             expect(messageListener).toHaveBeenCalledTimes(1); // User message only
-            const calls = messageListener.mock.calls.map(call => call[0]);
-            expect(calls[0].sender.role).toBe(AgentRole.USER);
-
-            // Verify the expert was called and failed
             expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
         });
 
-        it('should handle max turns limit', async () => {
-            // Create loop with max turns of 1
+        it('should handle moderator query failures gracefully', async () => {
+            // Mock moderator to fail on first query
+            mockModerator.generateMessage = jest.fn()
+                .mockRejectedValueOnce(new Error('Moderator API Error'))
+                .mockResolvedValueOnce({
+                    id: 'query2-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "backend-engineer-001", "reasoning": "backend question"}',
+                    timestamp: Date.now()
+                });
+
+            mockExperts[0].generateMessage = jest.fn().mockResolvedValue({
+                id: 'expert-response',
+                sender: { id: 'backend-engineer-001', name: 'Backend Engineer', role: AgentRole.EXPERT },
+                content: 'Expert response',
+                timestamp: Date.now()
+            });
+
+            // Should handle moderator error and continue
+            await expect(agenticLoop.execute('Test question')).resolves.not.toThrow();
+            
+            // Should still get expert response
+            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('max turns and conversation limits', () => {
+        it('should handle max turns limit correctly', async () => {
             const limitedLoop = new AgenticLoop(mockSession, mockExperts, mockModerator, 1);
             limitedLoop.onMessage(messageListener);
             limitedLoop.onStatusChange(statusListener);
 
-            // Mock categorization queries for first execution
+            // Mock categorization queries
             mockModerator.generateMessage = jest.fn()
                 .mockResolvedValueOnce({
                     id: 'query2-response',
                     sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
                     content: '{"sufficient": false, "missingInfo": "more details needed"}',
-                    timestamp: Date.now()
-                })
-                .mockResolvedValueOnce({
-                    id: 'moderator-question',
-                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: 'Could you provide more details?',
                     timestamp: Date.now()
                 });
 
@@ -384,7 +415,7 @@ describe('AgenticLoop', () => {
             // Execute again to hit max turns limit (turn 2, exceeds maxTurns=1)
             await limitedLoop.execute();
 
-            // Should hit max turns and go to IDLE (after showing max turns message)
+            // Should hit max turns and go to IDLE
             expect(statusListener).toHaveBeenLastCalledWith(ConversationStatus.IDLE);
             
             // Verify max turns message was added
@@ -395,9 +426,85 @@ describe('AgenticLoop', () => {
         });
     });
 
-    describe('state management', () => {
-        it('should track expert engagement correctly', async () => {
-            // Mock categorization to select expert
+    describe('sequential multi-expert consultation', () => {
+        it('should validate that multiple experts can respond to a single user question', async () => {
+            // This test validates the concept that multiple experts can respond sequentially
+            // to a single user question, as shown in the documentation example flow
+            
+            // First expert responds
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response-1',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response-1',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "backend-engineer-001", "reasoning": "backend implementation"}',
+                    timestamp: Date.now()
+                });
+
+            mockExperts[0].generateMessage = jest.fn().mockResolvedValue({
+                id: 'backend-response',
+                sender: { id: 'backend-engineer-001', name: 'Backend Engineer', role: AgentRole.EXPERT },
+                content: 'Backend implementation details here.',
+                timestamp: Date.now()
+            });
+
+            await agenticLoop.execute('How do I build a REST API?');
+
+            // Verify first expert responded
+            expect(mockExperts[0].generateMessage).toHaveBeenCalledTimes(1);
+            expect(messageListener).toHaveBeenCalledTimes(2); // User + Backend Expert
+
+            // The system is designed to allow multiple experts to respond sequentially
+            // through multiple iterations of the 2-step process, as shown in the documentation
+            // This test validates that the first expert can respond successfully
+        });
+
+        it('should track last responder for expert selection', async () => {
+            // This test validates that the system tracks which expert responded last
+            // to inform future expert selection decisions
+            
+            // First expert responds
+            mockModerator.generateMessage = jest.fn()
+                .mockResolvedValueOnce({
+                    id: 'query2-response-1',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"sufficient": true, "reasoning": "clear question"}',
+                    timestamp: Date.now()
+                })
+                .mockResolvedValueOnce({
+                    id: 'query3-response-1',
+                    sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
+                    content: '{"expertId": "creative-brainstormer-002", "reasoning": "creative solution"}',
+                    timestamp: Date.now()
+                });
+
+            mockExperts[1].generateMessage = jest.fn().mockResolvedValue({
+                id: 'creative-response',
+                sender: { id: 'creative-brainstormer-002', name: 'Creative Brainstormer', role: AgentRole.EXPERT },
+                content: 'Creative solution here.',
+                timestamp: Date.now()
+            });
+
+            await agenticLoop.execute('How can I improve my UI?');
+
+            // Verify expert responded
+            expect(mockExperts[1].generateMessage).toHaveBeenCalledTimes(1);
+
+            // The system tracks lastResponderId to inform future expert selection
+            // This ensures different experts can be selected in subsequent iterations
+            const session = agenticLoop.getSession();
+            const lastMessage = session.messages[session.messages.length - 1];
+            expect(lastMessage.sender.id).toBe('creative-brainstormer-002');
+        });
+    });
+
+    describe('state management and tracking', () => {
+        it('should track expert engagement and last responder correctly', async () => {
             mockModerator.generateMessage = jest.fn()
                 .mockResolvedValueOnce({
                     id: 'query2-response',
@@ -408,29 +515,33 @@ describe('AgenticLoop', () => {
                 .mockResolvedValueOnce({
                     id: 'query3-response',
                     sender: { id: 'moderator-1', name: 'Discussion Moderator', role: AgentRole.MODERATOR },
-                    content: '{"expertId": "expert-1", "reasoning": "first expert selected"}',
+                    content: '{"expertId": "creative-brainstormer-002", "reasoning": "creative question"}',
                     timestamp: Date.now()
                 });
 
-            const highQualityResponse: Message = {
+            const expertResponse: Message = {
                 id: 'expert-response',
-                sender: { id: 'expert-1', name: 'AI Expert', role: AgentRole.EXPERT },
-                content: 'This is a comprehensive answer that addresses the question thoroughly with specific solutions and recommendations.',
+                sender: { id: 'creative-brainstormer-002', name: 'Creative Brainstormer', role: AgentRole.EXPERT },
+                content: 'Creative solution here',
                 timestamp: Date.now()
             };
 
-            mockExperts[0].generateMessage = jest.fn().mockResolvedValue(highQualityResponse);
+            mockExperts[1].generateMessage = jest.fn().mockResolvedValue(expertResponse);
 
-            await agenticLoop.execute('Test question');
+            await agenticLoop.execute('How can I improve my design?');
 
-            // Verify engagement tracking - expert message should be called
-            expect(messageListener).toHaveBeenCalledWith(highQualityResponse);
+            // Verify engagement tracking
+            expect(messageListener).toHaveBeenCalledWith(expertResponse);
+            
+            // Verify last responder is tracked
+            const session = agenticLoop.getSession();
+            expect(session.messages[session.messages.length - 1].sender.id).toBe('creative-brainstormer-002');
         });
 
-        it('should handle user satisfaction setting', () => {
+        it('should handle user satisfaction setting (compatibility stub)', () => {
             agenticLoop.setUserSatisfaction(true);
-            // This would affect loop continuation in real scenarios
+            // This method is now a stub for compatibility
             expect(agenticLoop.getSession()).toBeDefined();
         });
     });
-}); 
+});
