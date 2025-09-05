@@ -27,6 +27,22 @@
 			{
 				"command": "poe.resetConversation",
 				"title": "Reset Conversation"
+			},
+			{
+				"command": "poe.forceSetOllamaModel",
+				"title": "Force Set Ollama Model (Fast)"
+			},
+			{
+				"command": "poe.clearPanelStorage",
+				"title": "Clear Panel Storage (Reset Models)"
+			},
+			{
+				"command": "poe.forceRefreshModels",
+				"title": "Force Refresh All Models"
+			},
+			{
+				"command": "poe.showCurrentModels",
+				"title": "Show Current Model Configuration"
 			}
 		],
 		"configuration": {
@@ -36,6 +52,12 @@
 					"type": "string",
 					"default": "",
 					"description": "OpenAI API Key for GPT models",
+					"scope": "application"
+				},
+				"poe.openaiDefaultModel": {
+					"type": "string",
+					"default": "gpt-4o-mini",
+					"description": "Default OpenAI model to use",
 					"scope": "application"
 				},
 				"poe.openaiBaseUrl": {
@@ -50,10 +72,22 @@
 					"description": "Anthropic API Key for Claude models",
 					"scope": "application"
 				},
+				"poe.anthropicDefaultModel": {
+					"type": "string",
+					"default": "claude-3-5-sonnet-20241022",
+					"description": "Default Anthropic model to use",
+					"scope": "application"
+				},
 				"poe.geminiApiKey": {
 					"type": "string",
 					"default": "",
 					"description": "Gemini API Key for Google AI services",
+					"scope": "application"
+				},
+				"poe.geminiDefaultModel": {
+					"type": "string",
+					"default": "gemini-1.5-pro",
+					"description": "Default Gemini model to use",
 					"scope": "application"
 				},
 				"poe.ollamaBaseUrl": {
@@ -66,6 +100,12 @@
 					"type": "number",
 					"default": 30000,
 					"description": "Timeout for Ollama requests in milliseconds",
+					"scope": "application"
+				},
+				"poe.ollamaDefaultModel": {
+					"type": "string",
+					"default": "llama3.2:1b",
+					"description": "Default Ollama model to use for experts and moderator",
 					"scope": "application"
 				},
 				"poe.defaultProvider": {

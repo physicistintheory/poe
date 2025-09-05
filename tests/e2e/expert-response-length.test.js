@@ -1,4 +1,4 @@
-// Test to validate that experts keep their responses to 4 sentences or less
+// Test to validate that experts keep their responses to 3 sentences or less
 const { AgenticLoop } = require('../../dist/orchestration/AgenticLoop');
 const { v4: uuidv4 } = require('uuid');
 
@@ -102,14 +102,14 @@ class ResponseLengthTestProvider {
             };
         } else {
             // Generate expert responses with varying sentence counts to test the limit
-            // With improved prompt, compliance should be higher (75% compliance)
+            // With improved prompt, compliance should be higher (100% compliance for 3-sentence limit)
             let response;
             if (this.responseCount === 3) {
                 response = "I recommend starting with a simple REST API. This approach is well-established and easy to maintain."; // 2 sentences
             } else if (this.responseCount === 7) {
                 response = "Consider using a microservices architecture for better scalability. This will allow independent deployment of different components."; // 2 sentences
             } else if (this.responseCount === 11) {
-                response = "For this type of application, I'd suggest using Node.js with Express for the backend. This combination provides excellent performance and a rich ecosystem of libraries. The asynchronous nature of Node.js is perfect for handling multiple concurrent requests."; // 4 sentences
+                response = "For this type of application, I'd suggest using Node.js with Express for the backend. This combination provides excellent performance and a rich ecosystem of libraries."; // 3 sentences
             } else {
                 // Default to short response for any other case
                 response = "Database optimization should be a priority from the beginning. Proper indexing can dramatically improve performance."; // 2 sentences
@@ -228,9 +228,9 @@ async function testExpertResponseLength() {
         Object.entries(mockProvider.expertResponses).forEach(([expertId, responses]) => {
             console.log(`\n👤 ${expertId}:`);
             responses.forEach((response, index) => {
-                const status = response.sentenceCount <= 4 ? '✅' : '❌';
+                const status = response.sentenceCount <= 3 ? '✅' : '❌';
                 console.log(`  ${status} Response ${response.responseNumber}: ${response.sentenceCount} sentences`);
-                if (response.sentenceCount > 4) {
+                if (response.sentenceCount > 3) {
                     console.log(`     Content: "${response.content.substring(0, 100)}..."`);
                 }
             });
@@ -242,7 +242,7 @@ async function testExpertResponseLength() {
         let totalResponses = 0;
         let compliantResponses = 0;
         let nonCompliantResponses = 0;
-        const maxSentenceCount = 4;
+        const maxSentenceCount = 3; // Reduced from 4 to enforce stricter limits
         
         Object.values(mockProvider.expertResponses).forEach(responses => {
             responses.forEach(response => {
@@ -283,12 +283,12 @@ async function testExpertResponseLength() {
                 console.log(`  Content: "${violation.content}"`);
             });
         } else {
-            console.log('\n✅ SUCCESS: All responses comply with the 4-sentence limit!');
+            console.log('\n✅ SUCCESS: All responses comply with the 3-sentence limit!');
         }
         
         // Summary
         console.log('\n🎯 Key Findings:');
-        console.log('1. Expert prompt template includes: "CRITICAL RESPONSE RULE: You MUST limit your responses to 4 sentences or fewer. This is a strict requirement."');
+        console.log('1. Expert prompt template includes: "🚨 ABSOLUTE RESPONSE RULE: You MUST keep responses to 2-3 sentences maximum. NEVER exceed 3 sentences."');
         console.log('2. This test validates whether experts actually follow this instruction');
         console.log('3. Mock provider generates responses with varying sentence counts to test the limit');
         console.log('4. Real AI models should respect the prompt instruction and stay within limits');
@@ -297,7 +297,7 @@ async function testExpertResponseLength() {
         if (nonCompliantResponses === 0) {
             console.log('\n🎉 OVERALL RESULT: All expert responses comply with sentence limit!');
         } else {
-            console.log(`\n⚠️  OVERALL RESULT: ${nonCompliantResponses} responses exceed the 4-sentence limit`);
+            console.log(`\n⚠️  OVERALL RESULT: ${nonCompliantResponses} responses exceed the 3-sentence limit`);
             console.log('   This indicates the prompt instruction may need reinforcement or the AI model needs better prompting.');
         }
         

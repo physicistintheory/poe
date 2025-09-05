@@ -87,8 +87,8 @@ node tests/e2e/expert-rotation.test.js
 ### `expert-response-length.test.js`
 **Expert response length test**
 
-Tests that experts keep their responses to 4 sentences or less as specified in their prompt template. It:
-- Validates compliance with the 4-sentence limit instruction
+Tests that experts keep their responses to 3 sentences or less as specified in their prompt template. It:
+- Validates compliance with the 3-sentence limit instruction
 - Tracks sentence counts for each expert response
 - Identifies violations of the length constraint
 - Provides compliance rate statistics

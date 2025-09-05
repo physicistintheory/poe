@@ -133,9 +133,33 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
             
             this._panels = this._panels.map(panel => {
                 // Update experts
+                // print out expert's default models, along with their provider and name
                 const updatedExperts = panel.experts.map(expert => {
+                    if (outputChannel) {
+                        outputChannel.appendLine(`KBUX: Expert ${expert.name} - Provider: ${expert.provider}, Default model: ${expert.model}`);
+                    }
+                    
                     if (!expert.model && availableModels[expert.provider] && availableModels[expert.provider].length > 0) {
-                        return { ...expert, model: availableModels[expert.provider][0] };
+                        // Use the provider's default model instead of the first available model
+                        const providerDefaultModel = this._getProviderDefaultModel(expert.provider);
+                        if (outputChannel) {
+                            outputChannel.appendLine(`DEBUG: Expert ${expert.name} - Provider: ${expert.provider}, Available models: [${availableModels[expert.provider].join(', ')}], Provider default: ${providerDefaultModel}`);
+                        }
+                        if (providerDefaultModel) {
+                            if (outputChannel) {
+                                outputChannel.appendLine(`✅ Updating expert ${expert.name} with provider default model: ${providerDefaultModel}`);
+                            }
+                            return { ...expert, model: providerDefaultModel };
+                        } else {
+                            // Fallback to first available model if no provider default
+                            if (outputChannel) {
+                                outputChannel.appendLine(`⚠️  No provider default found, using first available model: ${availableModels[expert.provider][0]}`);
+                            }
+                            return { ...expert, model: availableModels[expert.provider][0] };
+                        }
+                    }
+                    if (outputChannel) {
+                        outputChannel.appendLine(`Expert ${expert.name} already has a model: ${expert.model}`);
                     }
                     return expert;
                 });
@@ -143,7 +167,23 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
                 // Update moderator
                 let updatedModerator = panel.moderator;
                 if (!panel.moderator.model && availableModels[panel.moderator.provider] && availableModels[panel.moderator.provider].length > 0) {
-                    updatedModerator = { ...panel.moderator, model: availableModels[panel.moderator.provider][0] };
+                    // Use the provider's default model instead of the first available model
+                    const providerDefaultModel = this._getProviderDefaultModel(panel.moderator.provider);
+                    if (outputChannel) {
+                        outputChannel.appendLine(`DEBUG: Moderator - Provider: ${panel.moderator.provider}, Available models: [${availableModels[panel.moderator.provider].join(', ')}], Provider default: ${providerDefaultModel}`);
+                    }
+                    if (providerDefaultModel) {
+                        updatedModerator = { ...panel.moderator, model: providerDefaultModel };
+                        if (outputChannel) {
+                            outputChannel.appendLine(`✅ Updating moderator with provider default model: ${providerDefaultModel}`);
+                        }
+                    } else {
+                        // Fallback to first available model if no provider default
+                        updatedModerator = { ...panel.moderator, model: availableModels[panel.moderator.provider][0] };
+                        if (outputChannel) {
+                            outputChannel.appendLine(`⚠️  No provider default found, using first available model: ${availableModels[panel.moderator.provider][0]}`);
+                        }
+                    }
                 }
                 
                 return {
@@ -1431,6 +1471,24 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         }
         
         return models;
+    }
+
+    /**
+     * Get the default model for a given provider
+     */
+    private _getProviderDefaultModel(provider: string): string | undefined {
+        switch (provider) {
+            case 'openai':
+                return 'gpt-4o-mini';
+            case 'anthropic':
+                return 'claude-3-5-sonnet-20241022';
+            case 'gemini':
+                return 'gemini-1.5-pro';
+            case 'ollama':
+                return 'llama3.2:1b'; // Force the fast model
+            default:
+                return undefined;
+        }
     }
 
     /**

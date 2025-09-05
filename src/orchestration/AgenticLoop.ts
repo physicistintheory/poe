@@ -67,6 +67,7 @@ export class AgenticLoop {
      * This is the main entry point that orchestrates the discussion flow
      */
     async execute(userMessage?: string): Promise<void> {
+        const executionStartTime = Date.now();
         log(`AgenticLoop: Starting 2-step execution with user message: "${userMessage || 'none'}"`);
         
         // Initialize loop with new user message if provided
@@ -81,7 +82,14 @@ export class AgenticLoop {
             await this.runDiscussionLoop();
             log(`AgenticLoop: Discussion loop completed`);
 
+            const executionEndTime = Date.now();
+            const totalDuration = executionEndTime - executionStartTime;
+            log(`AgenticLoop: Total execution completed in ${totalDuration}ms`);
+
         } catch (error) {
+            const executionEndTime = Date.now();
+            const totalDuration = executionEndTime - executionStartTime;
+            log(`AgenticLoop: Execution failed after ${totalDuration}ms: ${error}`);
             console.error('Error during agentic loop execution:', error);
             this.setStatus(ConversationStatus.ERROR);
         }
@@ -98,6 +106,7 @@ export class AgenticLoop {
         log(`AgenticLoop: Starting discussion loop with maxTurns=${this.maxTurns}, currentTurn=${this.currentTurn}`);
 
         while (shouldContinue && this.currentTurn < this.maxTurns && consecutiveNoProgress < maxNoProgress) {
+            const iterationStartTime = Date.now();
             log(`AgenticLoop: Discussion loop iteration ${this.currentTurn}, consecutive no progress: ${consecutiveNoProgress}`);
 
             // Step 1: Run parallel categorization queries
@@ -107,6 +116,10 @@ export class AgenticLoop {
             // Step 2: Execute action based on categorization results
             log(`AgenticLoop: Executing action based on categorization...`);
             const actionResult = await this.executeActionBasedOnCategorization(categorizationResults);
+
+            const iterationEndTime = Date.now();
+            const iterationDuration = iterationEndTime - iterationStartTime;
+            log(`AgenticLoop: Iteration ${this.currentTurn} completed in ${iterationDuration}ms`);
 
             // Check if we should continue
             if (actionResult === 'conclude' || actionResult === 'wait_for_user') {
@@ -137,6 +150,30 @@ export class AgenticLoop {
         } else if (this.currentTurn >= this.maxTurns) {
             log(`AgenticLoop: Max turns reached, concluding discussion`);
             await this.concludeDiscussion();
+        }
+    }
+
+    /**
+     * Pre-warm the model to ensure fast response times
+     */
+    private async prewarmModel(): Promise<void> {
+        try {
+            log('AgenticLoop: Pre-warming model for faster responses...');
+            const startTime = Date.now();
+            
+            // Make a simple warm-up call
+            await this.moderator.generateMessage([{
+                id: uuidv4(),
+                sender: { id: 'system', name: 'System', role: AgentRole.MODERATOR },
+                content: 'Ready',
+                timestamp: Date.now()
+            }], false);
+            
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+            log(`AgenticLoop: Model pre-warmed in ${duration}ms`);
+        } catch (error) {
+            log(`AgenticLoop: Model pre-warming failed: ${error}`);
         }
     }
 
@@ -189,6 +226,11 @@ export class AgenticLoop {
         this.setStatus(ConversationStatus.PROCESSING);
         this.currentTurn++;
 
+        // Pre-warm the model for faster responses
+        this.prewarmModel().catch(error => {
+            log(`AgenticLoop: Pre-warming failed: ${error}`);
+        });
+
         log(`AgenticLoop: Initialized loop, turn ${this.currentTurn}, user message: "${this.lastUserMessage}"`);
         log(`AgenticLoop: Initialization successful, returning true`);
         return true;
@@ -202,7 +244,9 @@ export class AgenticLoop {
         enoughInfo: { sufficient: boolean; missingInfo?: string };
         nextExpert: { expertId: string; reasoning: string };
     }> {
-        log('AgenticLoop: Step 1 - Running parallel categorization queries');
+        const startTime = Date.now();
+        const iterationId = Math.random().toString(36).substr(2, 9);
+        log(`AgenticLoop: Step 1 - Running parallel categorization queries [${iterationId}] at ${new Date().toISOString()}`);
 
         // Run all 3 queries in parallel
         const [questionAnswered, enoughInfo, nextExpert] = await Promise.all([
@@ -211,7 +255,9 @@ export class AgenticLoop {
             this.whoShouldAnswerNext()
         ]);
 
-        log(`AgenticLoop: Categorization results - Question answered: ${questionAnswered.answered} (${questionAnswered.confidence}), Enough info: ${enoughInfo.sufficient}, Next expert: ${nextExpert.expertId}`);
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        log(`AgenticLoop: Categorization [${iterationId}] completed in ${duration}ms (start: ${startTime}, end: ${endTime}) - Question answered: ${questionAnswered.answered} (${questionAnswered.confidence}), Enough info: ${enoughInfo.sufficient}, Next expert: ${nextExpert.expertId}`);
 
         return {
             questionAnswered,
@@ -231,17 +277,11 @@ export class AgenticLoop {
             return { answered: false, confidence: 0.0 };
         }
 
-        const prompt = `Given the conversation history and the user's original question, determine if the user's question has been adequately answered.
+        const queryStartTime = Date.now();
+        log(`AgenticLoop: Query 1 - Starting question resolution assessment at ${new Date().toISOString()}`);
 
-User's question: "${this.lastUserMessage}"
-Conversation history: ${this.getRecentConversationSummary()}
-
-Respond with a JSON object:
-{
-  "answered": true/false,
-  "confidence": 0.0-1.0,
-  "reasoning": "brief explanation"
-}`;
+        const prompt = `Q: "${this.lastUserMessage}" answered? Context: ${this.getRecentConversationSummary()}
+JSON: {"answered": true/false, "confidence": 0.0-1.0, "reasoning": "brief"}`;
 
         try {
             const response = await this.moderator.generateMessage([{
@@ -251,12 +291,17 @@ Respond with a JSON object:
                 timestamp: Date.now()
             }], false);
 
+            const queryEndTime = Date.now();
+            const queryDuration = queryEndTime - queryStartTime;
+
             // Parse the response to extract the assessment
             const assessment = this.parseUserQuestionAnsweredResponse(response.content);
-            log(`AgenticLoop: Query 1 - Question answered: ${assessment.answered} (confidence: ${assessment.confidence})`);
+            log(`AgenticLoop: Query 1 - Question answered: ${assessment.answered} (confidence: ${assessment.confidence}) completed in ${queryDuration}ms`);
             return assessment;
         } catch (error) {
-            log(`AgenticLoop: Query 1 - Error, defaulting to false: ${error}`);
+            const queryEndTime = Date.now();
+            const queryDuration = queryEndTime - queryStartTime;
+            log(`AgenticLoop: Query 1 - Error after ${queryDuration}ms, defaulting to false: ${error}`);
             return { answered: false, confidence: 0.0 };
         }
     }
@@ -266,20 +311,12 @@ Respond with a JSON object:
      * "Do we have enough information to engage the experts, or should we ask a clarifying question to the user?"
      */
     private async doWeHaveEnoughInformation(): Promise<{ sufficient: boolean; missingInfo?: string }> {
-        const prompt = `Given the user's question and conversation context, determine if we have enough information to engage the experts effectively, or if we should ask the user for clarification.
+        const queryStartTime = Date.now();
+        log(`AgenticLoop: Query 2 - Starting information sufficiency assessment at ${new Date().toISOString()}`);
 
-
-Rules: Error on the side of allowing the converation to start.  If the question is related at all to the experts, let them start.  If the question is not related to the experts, ask the user for clarification.
-User's question: "${this.lastUserMessage}"
-Conversation context: ${this.getRecentConversationSummary()}
-Expert capabilities: ${this.experts.map(e => e.getSpecialization()).join(', ')}
-
-Respond with a JSON object:
-{
-  "sufficient": true/false,
-  "missingInfo": "specific missing information if insufficient",
-  "reasoning": "brief explanation"
-}`;
+        const prompt = `Q: "${this.lastUserMessage}" - enough info for experts? Context: ${this.getRecentConversationSummary()}
+Experts: ${this.experts.map(e => e.getSpecialization()).join(', ')}
+Rule: Allow if related to experts. JSON: {"sufficient": true/false, "missingInfo": "if insufficient", "reasoning": "brief"}`;
 
         try {
             const response = await this.moderator.generateMessage([{
@@ -289,11 +326,16 @@ Respond with a JSON object:
                 timestamp: Date.now()
             }], false);
 
+            const queryEndTime = Date.now();
+            const queryDuration = queryEndTime - queryStartTime;
+
             const assessment = this.parseEnoughInformationResponse(response.content);
-            log(`AgenticLoop: Query 2 - Enough info: ${assessment.sufficient}${assessment.missingInfo ? ` (missing: ${assessment.missingInfo})` : ''}`);
+            log(`AgenticLoop: Query 2 - Enough info: ${assessment.sufficient}${assessment.missingInfo ? ` (missing: ${assessment.missingInfo})` : ''} completed in ${queryDuration}ms`);
             return assessment;
         } catch (error) {
-            log(`AgenticLoop: Query 2 - Error, defaulting to sufficient: ${error}`);
+            const queryEndTime = Date.now();
+            const queryDuration = queryEndTime - queryStartTime;
+            log(`AgenticLoop: Query 2 - Error after ${queryDuration}ms, defaulting to sufficient: ${error}`);
             return { sufficient: true };
         }
     }
@@ -303,29 +345,17 @@ Respond with a JSON object:
      * "Given these descriptions of experts, including who answered last time, who should answer next?"
      */
     private async whoShouldAnswerNext(): Promise<{ expertId: string; reasoning: string }> {
+        const queryStartTime = Date.now();
+        log(`AgenticLoop: Query 3 - Starting expert selection at ${new Date().toISOString()}`);
+
         const expertDescriptions = this.experts.map(expert => 
             `${expert.getName()} (${expert.getId()}): ${expert.getSpecialization()}`
         ).join('\n');
 
-        const prompt = `Given the expert descriptions, conversation history, and who answered last, determine which expert should answer next.
-
-Expert descriptions:
-${expertDescriptions}
-
-Last responder: ${this.lastResponderId || 'none'}
-User's question: "${this.lastUserMessage}"
-Conversation context: ${this.getRecentConversationSummary()}
-
-CRITICAL RULES:
-1. You must use the exact expert ID from the descriptions above. Do not make up IDs like "expert_1" or "expert_2".
-2. DO NOT select the same expert who answered last (${this.lastResponderId || 'none'}). Choose a different expert.
-3. If there's only one expert available, you may select them, but prefer variety when possible.
-
-Respond with a JSON object:
-{
-  "expertId": "exact_expert_id_from_descriptions",
-  "reasoning": "brief explanation of why this expert should answer next"
-}`;
+        const prompt = `Experts: ${expertDescriptions}
+Last: ${this.lastResponderId || 'none'}
+Q: "${this.lastUserMessage}"
+Rules: Use exact ID, avoid last responder. JSON: {"expertId": "id", "reasoning": "brief"}`;
 
         try {
             const response = await this.moderator.generateMessage([{
@@ -335,8 +365,11 @@ Respond with a JSON object:
                 timestamp: Date.now()
             }], false);
 
+            const queryEndTime = Date.now();
+            const queryDuration = queryEndTime - queryStartTime;
+
             const selection = this.parseNextExpertSelectionResponse(response.content);
-            log(`AgenticLoop: Query 3 - Selected expert: ${selection.expertId} (${selection.reasoning})`);
+            log(`AgenticLoop: Query 3 - Selected expert: ${selection.expertId} (${selection.reasoning}) completed in ${queryDuration}ms`);
             
             // Validate that the selected expert is different from the last responder
             if (selection.expertId === this.lastResponderId && this.experts.length > 1) {
@@ -346,7 +379,9 @@ Respond with a JSON object:
             
             return selection;
         } catch (error) {
-            log(`AgenticLoop: Query 3 - Error, using fallback selection: ${error}`);
+            const queryEndTime = Date.now();
+            const queryDuration = queryEndTime - queryStartTime;
+            log(`AgenticLoop: Query 3 - Error after ${queryDuration}ms, using fallback selection: ${error}`);
             return this.selectFallbackExpert();
         }
     }

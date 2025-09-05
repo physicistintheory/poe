@@ -1,8 +1,10 @@
 import { ProviderType, PluginConfig, ExpertAgentConfig, ModeratorConfig, ConversationSession, PanelConfig } from './types';
 import { ProviderManager } from './providers/ProviderManager';
 import { ConversationOrchestrator, setConversationOutputChannel } from './orchestration/ConversationOrchestrator';
-import * as vscode from 'vscode';
 import { PanelViewProvider, setOutputChannel } from './ui/PanelViewProvider';
+import { setExpertAgentOutputChannel } from './agents/ExpertAgent';
+import { setModeratorAgentOutputChannel } from './agents/ModeratorAgent';
+import * as vscode from 'vscode';
 
 // Default expert configurations
 const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
@@ -10,7 +12,7 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
         id: 'expert-1',
         name: 'Backend Engineer',
         provider: ProviderType.OLLAMA,
-        model: '', // Will be set dynamically based on available models
+        model: 'llama3.2:1b',
         persona: `You are a veteran software engineer with extensive backend experience. 
     You focus on architectural decisions, code quality, and performance optimizations.
     You value reliable, scalable, and maintainable solutions over quick hacks.`,
@@ -21,7 +23,7 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
         id: 'expert-2',
         name: 'Creative Brainstormer',
         provider: ProviderType.OLLAMA,
-        model: '', // Will be set dynamically based on available models
+        model: 'llama3.2:1b',
         persona: `You are an innovative thinker who excels at generating creative solutions.
     You think outside the box and challenge assumptions.
     You're skilled at finding unconventional approaches to problems.`,
@@ -32,7 +34,7 @@ const DEFAULT_EXPERTS: ExpertAgentConfig[] = [
         id: 'expert-3',
         name: 'Code Optimizer',
         provider: ProviderType.OLLAMA,
-        model: '', // Will be set dynamically based on available models
+        model: 'llama3.2:1b',
         persona: `You are an efficiency-focused developer who specializes in optimizing code.
     You can spot inefficient patterns and suggest improvements.
     You balance readability with performance considerations.`,
@@ -46,7 +48,7 @@ const DEFAULT_MODERATOR: ModeratorConfig = {
     id: 'moderator',
     name: 'Moderator',
     provider: ProviderType.OLLAMA,
-    model: '', // Will be set dynamically based on available models
+    model: 'llama3.2:1b',
     systemPrompt: `As a discussion moderator, your job is to guide the conversation toward productive outcomes.
   Keep the experts focused on the user's question and prevent tangents.
   Summarize key points and ask clarifying questions when needed.`,
@@ -74,7 +76,7 @@ const DEFAULT_CONFIG: PluginConfig = {
         },
         [ProviderType.OLLAMA]: {
             type: ProviderType.OLLAMA,
-            defaultModel: '', // Will be populated dynamically
+            defaultModel: 'llama3.2:1b', // Force fast model
             models: [] // Will be populated dynamically
         }
     },
@@ -102,6 +104,12 @@ export class PoePlugin {
                 ...(config.providers || {})
             }
         };
+
+        // Debug: Show the final configuration
+        console.log('PoePlugin: Final configuration:', {
+            ollamaDefaultModel: this.config.providers[ProviderType.OLLAMA]?.defaultModel,
+            ollamaModels: this.config.providers[ProviderType.OLLAMA]?.models
+        });
 
         // Try to get API keys from Cursor settings
         this.loadApiKeysFromSettings();
@@ -152,7 +160,7 @@ export class PoePlugin {
 
         console.log('Initializing provider manager...');
 
-        // Populate models dynamically and set default models for experts and moderator
+        // Populate available models (do not change configured defaults)
         await this.populateModelsAndSetDefaults();
 
         // Don't create an initial conversation - let the user start one with their selected panel
@@ -175,7 +183,7 @@ export class PoePlugin {
     }
 
     /**
-     * Populate models dynamically and set default models for experts and moderator
+     * Populate available models from providers without changing configured defaults
      */
     private async populateModelsAndSetDefaults(): Promise<void> {
         try {
@@ -185,6 +193,7 @@ export class PoePlugin {
             for (const [providerType, provider] of providers) {
                 try {
                     const models = await provider.getAvailableModels();
+                    console.log(`Models for ${providerType}:`, models);
                     if (models.length > 0) {
                         // Update the config with available models
                         const providerConfig = this.config.providers[providerType as ProviderType];
@@ -192,9 +201,11 @@ export class PoePlugin {
                             providerConfig.models = models;
                         }
                         
-                        // Set default model for this provider if not already set
-                        if (providerConfig && !providerConfig.defaultModel) {
-                            providerConfig.defaultModel = models[0];
+                        // Log the final model selection (but don't override our hardcoded choice)
+                        if (providerConfig && providerConfig.defaultModel) {
+                            console.log(`Provider ${providerType} using model: ${providerConfig.defaultModel}`);
+                        } else {
+                            console.warn(`Provider ${providerType} has no default model set`);
                         }
                         
                         console.log(`Successfully loaded ${models.length} models for ${providerType}: ${models.join(', ')}`);
@@ -203,30 +214,6 @@ export class PoePlugin {
                     }
                 } catch (error) {
                     console.warn(`Failed to fetch models for provider ${providerType}:`, error);
-                }
-            }
-
-            // Set default models for experts and moderator if they don't have models set
-            this.config.defaultExperts = this.config.defaultExperts.map(expert => {
-                if (!expert.model) {
-                    const providerConfig = this.config.providers[expert.provider];
-                    if (providerConfig && providerConfig.defaultModel) {
-                        console.log(`Set default model for expert ${expert.name}: ${providerConfig.defaultModel}`);
-                        return { ...expert, model: providerConfig.defaultModel };
-                    } else {
-                        console.warn(`No default model available for expert ${expert.name} (provider: ${expert.provider})`);
-                    }
-                }
-                return expert;
-            });
-
-            if (!this.config.defaultModerator.model) {
-                const providerConfig = this.config.providers[this.config.defaultModerator.provider];
-                if (providerConfig && providerConfig.defaultModel) {
-                    console.log(`Set default model for moderator: ${providerConfig.defaultModel}`);
-                    this.config.defaultModerator = { ...this.config.defaultModerator, model: providerConfig.defaultModel };
-                } else {
-                    console.warn(`No default model available for moderator (provider: ${this.config.defaultModerator.provider})`);
                 }
             }
 
@@ -250,6 +237,21 @@ export class PoePlugin {
         const experts = settings.experts || this.config.defaultExperts;
         const moderator = settings.moderator || this.config.defaultModerator;
 
+        // Always resolve models from provider defaults, ignoring any stored model values
+        const resolvedExperts = experts.map(expert => {
+            const providerDefault = this.config.providers[expert.provider]?.defaultModel;
+            const finalModel = providerDefault || expert.model || (expert.provider === ProviderType.OLLAMA ? 'llama3.2:1b' : '');
+            if (outputChannel) {
+                outputChannel.appendLine(`Model override: Expert ${expert.name} -> ${finalModel}`);
+            }
+            return { ...expert, model: finalModel };
+        });
+        const moderatorProviderDefault = this.config.providers[moderator.provider]?.defaultModel;
+        const resolvedModerator = { ...moderator, model: moderatorProviderDefault || moderator.model || (moderator.provider === ProviderType.OLLAMA ? 'llama3.2:1b' : '') };
+        if (outputChannel) {
+            outputChannel.appendLine(`Model override: Moderator ${resolvedModerator.name} -> ${resolvedModerator.model}`);
+        }
+
         if (outputChannel) {
             outputChannel.appendLine(`createNewConversation - settings.experts provided: ${settings.experts ? 'YES' : 'NO'}`);
             outputChannel.appendLine(`createNewConversation - settings.moderator provided: ${settings.moderator ? 'YES' : 'NO'}`);
@@ -267,8 +269,8 @@ export class PoePlugin {
                     goal: settings.goal,
                     autoDiscuss: settings.autoDiscuss ?? this.config.autoDiscussDefault
                 },
-                experts,
-                moderator,
+                resolvedExperts,
+                resolvedModerator,
                 providers,
                 this.config.maxConversationHistoryLength,
             );
@@ -278,6 +280,58 @@ export class PoePlugin {
             console.error('Error creating conversation orchestrator:', error);
             throw error; // Re-throw to handle at caller level
         }
+    }
+
+    /**
+     * Force refresh all providers to ensure new configuration takes effect
+     */
+    async forceRefreshProviders(): Promise<void> {
+        console.log('PoePlugin: Force refreshing providers...');
+        await this.providerManager.forceRefreshProviders();
+        console.log('PoePlugin: Providers refreshed successfully');
+    }
+
+    /**
+     * Force set the Ollama model for all providers
+     */
+    public forceSetOllamaModel(model: string): void {
+        console.log(`Force setting Ollama model to: ${model}`);
+        
+        // Update the config
+        if (this.config.providers[ProviderType.OLLAMA]) {
+            this.config.providers[ProviderType.OLLAMA].defaultModel = model;
+        }
+        
+        // Force refresh all providers
+        this.providerManager.forceRefreshProviders();
+        
+        console.log(`Ollama model forced to: ${model}`);
+    }
+
+    /**
+     * Force refresh panel models to use correct default models
+     */
+    public forceRefreshPanelModels(): void {
+        console.log('Force refreshing panel models...');
+        
+        // Force refresh providers
+        this.providerManager.forceRefreshProviders();
+        
+        console.log('Panel models refresh initiated');
+    }
+
+    /**
+     * Get the current Ollama default model
+     */
+    public getOllamaDefaultModel(): string {
+        return this.config.providers[ProviderType.OLLAMA]?.defaultModel || 'none';
+    }
+
+    /**
+     * Get available Ollama models
+     */
+    public getAvailableOllamaModels(): string[] {
+        return this.config.providers[ProviderType.OLLAMA]?.models || [];
     }
 
     /**
@@ -404,6 +458,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // Pass the output channel to the PanelViewProvider
     setOutputChannel(outputChannel);
     setConversationOutputChannel(outputChannel);
+    setExpertAgentOutputChannel(outputChannel);
+    setModeratorAgentOutputChannel(outputChannel);
     
     outputChannel.appendLine('Activating Panel of Experts plugin');
     
@@ -500,6 +556,61 @@ export function activate(context: vscode.ExtensionContext): void {
                     outputChannel.appendLine('Updating panel view provider with new orchestrator after resetConversation command');
                     panelViewProvider.setOrchestrator(pluginInstance.getOrchestrator());
                 }
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('poe.forceRefreshProviders', () => {
+            if (pluginInstance) {
+                outputChannel.appendLine('Force refreshing providers to use new model configuration...');
+                pluginInstance.forceRefreshProviders().then(() => {
+                    outputChannel.appendLine('Providers refreshed successfully. New model configuration should now be active.');
+                }).catch(error => {
+                    outputChannel.appendLine(`Error refreshing providers: ${error}`);
+                });
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('poe.forceSetOllamaModel', () => {
+            if (pluginInstance) {
+                outputChannel.appendLine('Force setting Ollama model to llama3.2:1b for fast responses...');
+                pluginInstance.forceSetOllamaModel('llama3.2:1b');
+                outputChannel.appendLine('Ollama model forced to llama3.2:1b. New conversations should be fast.');
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('poe.clearPanelStorage', () => {
+            if (pluginInstance) {
+                outputChannel.appendLine('Clearing stored panel configurations to force new model selection...');
+                // Clear the stored panels from VS Code global state
+                context.globalState.update('poe.panels', undefined);
+                outputChannel.appendLine('Panel storage cleared. Restart the extension to use new default models.');
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('poe.forceRefreshModels', () => {
+            if (pluginInstance) {
+                outputChannel.appendLine('Force refreshing all models and providers...');
+                pluginInstance.forceRefreshPanelModels();
+                outputChannel.appendLine('Models refreshed. New conversations should use correct default models.');
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('poe.showCurrentModels', () => {
+            if (pluginInstance) {
+                outputChannel.appendLine('=== Current Model Configuration ===');
+                outputChannel.appendLine(`Ollama Default: ${pluginInstance.getOllamaDefaultModel()}`);
+                outputChannel.appendLine(`Available Ollama Models: ${pluginInstance.getAvailableOllamaModels().join(', ')}`);
+                outputChannel.appendLine('===============================');
             }
         })
     );

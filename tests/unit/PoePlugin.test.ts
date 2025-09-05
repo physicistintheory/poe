@@ -21,8 +21,8 @@ describe('PoePlugin', () => {
             providers: {
                 [ProviderType.OLLAMA]: {
                     type: ProviderType.OLLAMA,
-                    defaultModel: 'llama2:3b',
-                    models: ['llama2:3b', 'llama2:7b', 'mistral:7b', 'llama3.2:1b']
+                    defaultModel: 'llama3.2:1b',
+                    models: ['llama3.2:1b', 'llama2:7b', 'mistral:7b', 'qwen:4b']
                 }
             }
         });

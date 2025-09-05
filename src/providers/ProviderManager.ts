@@ -54,14 +54,54 @@ export class ProviderManager {
         }
         // Initialize Ollama provider if config exists
         if (this.configs[ProviderType.OLLAMA]) {
+            const ollamaModel = this.configs[ProviderType.OLLAMA]!.defaultModel || 'llama3.2:1b';
+            console.log(`ProviderManager: Creating Ollama provider with model: ${ollamaModel}`);
+            
             this.providers.set(
                 ProviderType.OLLAMA,
                 new OllamaProvider(
                     '',  // No API key needed for local Ollama
-                    this.configs[ProviderType.OLLAMA]!.defaultModel || 'llama2:3b'
+                    ollamaModel
                 )
             );
         }
+    }
+
+    /**
+     * Force set the Ollama model to ensure fast responses
+     */
+    forceSetOllamaModel(model: string): void {
+        console.log(`ProviderManager: Force setting Ollama model to: ${model}`);
+        
+        if (this.configs[ProviderType.OLLAMA]) {
+            this.configs[ProviderType.OLLAMA]!.defaultModel = model;
+            
+            // Remove existing Ollama provider
+            this.providers.delete(ProviderType.OLLAMA);
+            
+            // Create new provider with forced model
+            this.providers.set(
+                ProviderType.OLLAMA,
+                new OllamaProvider('', model)
+            );
+            
+            console.log(`ProviderManager: Ollama provider recreated with model: ${model}`);
+        }
+    }
+
+    /**
+     * Force refresh all providers with current configuration
+     */
+    async forceRefreshProviders(): Promise<void> {
+        console.log('ProviderManager: Force refreshing all providers...');
+        
+        // Clear existing providers
+        this.providers.clear();
+        
+        // Reinitialize all providers
+        await this.initialize();
+        
+        console.log('ProviderManager: All providers refreshed successfully');
     }
 
     /**
@@ -133,11 +173,14 @@ export class ProviderManager {
                         }
                         break;
                     case ProviderType.OLLAMA:
+                        const ollamaModel = this.configs[type]!.defaultModel || 'llama3.2:1b';
+                        console.log(`ProviderManager: Recreating Ollama provider with model: ${ollamaModel}`);
+                        
                         this.providers.set(
                             type,
                             new OllamaProvider(
                                 '',
-                                this.configs[type]!.defaultModel || 'llama2:3b'
+                                ollamaModel
                             )
                         );
                         break;

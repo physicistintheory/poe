@@ -1,6 +1,12 @@
 import { BaseAgent } from './BaseAgent';
 import { AgentRole, Message, ModeratorConfig } from '../types';
 import { BaseProvider } from '../providers/BaseProvider';
+import * as vscode from 'vscode';
+
+let outputChannel: vscode.OutputChannel;
+export function setModeratorAgentOutputChannel(channel: vscode.OutputChannel) {
+    outputChannel = channel;
+}
 
 /**
  * Moderator agent that guides and focuses the conversation
@@ -76,7 +82,9 @@ export class ModeratorAgent extends BaseAgent {
 4. Suggest a conclusion if the goal seems met
 5. Stay silent if the discussion is productive and on track
 
-Respond in your role as the Moderator. Goal: ${this.goal}`
+Respond in your role as the Moderator. Goal: ${this.goal}
+
+IMPORTANT: Keep your response to 2-3 sentences maximum.`
         });
 
         return formattedMessages;
@@ -134,6 +142,8 @@ ${this.systemPrompt}
 
 The current goal of the conversation is: ${this.goal}
 
+🚨 CRITICAL RESPONSE RULE: You MUST keep responses to 2-3 sentences maximum. NEVER exceed 3 sentences.
+
 As a moderator, your responsibilities are:
 1. Keep the discussion focused on the goal/question at hand
 2. Ensure balanced participation from all experts
@@ -150,6 +160,72 @@ You may intervene when:
 - A logical conclusion has been reached
 - The discussion has stagnated
 
-Be concise, clear, and facilitating rather than dominating. Your role is to guide, not to solve the problem directly.`;
+Be concise, clear, and facilitating rather than dominating. Your role is to guide, not to solve the problem directly.
+
+REMEMBER: MAXIMUM 3 SENTENCES. NO EXCEPTIONS.`;
+    }
+
+    /**
+     * Truncate response to maximum 3 sentences
+     */
+    private truncateToMaxSentences(content: string): string {
+        const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        if (sentences.length <= 3) {
+            return content;
+        }
+        
+        // Take first 3 sentences and add proper punctuation
+        const truncated = sentences.slice(0, 3).map(s => s.trim()).join('. ').trim();
+        return truncated + (truncated.endsWith('.') ? '' : '.');
+    }
+
+    /**
+     * Override generateMessage to enforce length constraint and add timing logs
+     */
+    async generateMessage(
+        messages: Message[],
+        asStream: boolean = false,
+        callback?: (chunk: string, done: boolean) => void
+    ): Promise<Message> {
+        const callId = Math.random().toString(36).substr(2, 9); // Generate unique call ID
+        
+        if (outputChannel) {
+            outputChannel.appendLine(`🕐 ${this.name} starting message generation [${callId}] at ${new Date().toISOString()}`);
+        }
+        
+        try {
+            // Time just the LLM call, not the entire message generation
+            const llmStartTime = Date.now();
+            
+            if (outputChannel) {
+                outputChannel.appendLine(`🔄 ${this.name} starting LLM call [${callId}] at ${new Date().toISOString()}`);
+            }
+            
+            const message = await super.generateMessage(messages, asStream, callback);
+            
+            const llmEndTime = Date.now();
+            const llmDuration = llmEndTime - llmStartTime;
+            
+            if (outputChannel) {
+                outputChannel.appendLine(`✅ ${this.name} LLM call [${callId}] completed in ${llmDuration}ms (start: ${llmStartTime}, end: ${llmEndTime})`);
+            }
+            
+            // Post-process to ensure response is within length limits
+            if (!asStream) {
+                message.content = this.truncateToMaxSentences(message.content);
+            }
+            
+            if (outputChannel) {
+                outputChannel.appendLine(`✅ ${this.name} message generation [${callId}] completed`);
+            }
+            
+            return message;
+        } catch (error) {
+            if (outputChannel) {
+                outputChannel.appendLine(`❌ ${this.name} message generation [${callId}] failed: ${error}`);
+            }
+            
+            throw error;
+        }
     }
 } 

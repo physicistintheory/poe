@@ -162,36 +162,84 @@ export class ConversationOrchestrator {
      * Start the agentic loop
      */
     async startAgenticLoop(): Promise<void> {
+        const startTime = Date.now();
         if (outputChannel) {
             outputChannel.appendLine(`KBUX starting agentic loop, status ${this.status}`);
         }
         
-        // Execute the agentic loop
-        await this.agenticLoop.execute();
+        try {
+            // Execute the agentic loop
+            await this.agenticLoop.execute();
+            
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+            if (outputChannel) {
+                outputChannel.appendLine(`KBUX agentic loop completed in ${duration}ms`);
+            }
+        } catch (error) {
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+            if (outputChannel) {
+                outputChannel.appendLine(`KBUX agentic loop failed after ${duration}ms: ${error}`);
+            }
+            throw error;
+        }
     }
 
     /**
      * Continue the agentic loop with additional user input
      */
     async continueAgenticLoop(userMessage?: string): Promise<void> {
+        const startTime = Date.now();
         if (outputChannel) {
             outputChannel.appendLine(`KBUX continuing agentic loop with user message: ${userMessage}`);
         }
         
-        // Execute the agentic loop with optional user message
-        await this.agenticLoop.execute(userMessage);
+        try {
+            // Execute the agentic loop with optional user message
+            await this.agenticLoop.execute(userMessage);
+            
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+            if (outputChannel) {
+                outputChannel.appendLine(`KBUX agentic loop continued in ${duration}ms`);
+            }
+        } catch (error) {
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+            if (outputChannel) {
+                outputChannel.appendLine(`KBUX agentic loop continuation failed after ${duration}ms: ${error}`);
+            }
+            throw error;
+        }
     }
 
     /**
      * Start the next round of the conversation (for test compatibility)
      */
     async startNextRound(): Promise<void> {
+        const startTime = Date.now();
         if (outputChannel) {
             outputChannel.appendLine('KBUX starting next round');
         }
         
-        // Execute the agentic loop to start the next round
-        await this.agenticLoop.execute();
+        try {
+            // Execute the agentic loop to start the next round
+            await this.agenticLoop.execute();
+            
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+            if (outputChannel) {
+                outputChannel.appendLine(`KBUX next round completed in ${duration}ms`);
+            }
+        } catch (error) {
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+            if (outputChannel) {
+                outputChannel.appendLine(`KBUX next round failed after ${duration}ms: ${error}`);
+            }
+            throw error;
+        }
     }
 
     /**
